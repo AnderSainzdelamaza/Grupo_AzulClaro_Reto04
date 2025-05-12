@@ -139,6 +139,7 @@ htmlwidgets::saveWidget(hc_plot, "Resultados/hc_clusters_plot.html")
 datos_completos <- datos_clientes
 datos_completos$kmeans_cluster <- kmeans_res$cluster
 datos_completos$hc_cluster <- cutree_hc
+write.csv(datos_completos, "DATOS/DatosShiny.csv")
 
 # Seleccionamos algunas variables importantes para visualizar
 variables_importantes <- names(datos_clientes)[2:5]  # Ajustar según las variables específicas
