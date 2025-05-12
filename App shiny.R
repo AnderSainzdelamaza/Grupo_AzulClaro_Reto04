@@ -114,6 +114,22 @@ ui <- navbarPage("Reto 4: Eroski",
                                          )
                                        )
                               )
+                            ),
+                            tabPanel("Productos por Cluster",
+                                     fluidPage(
+                                       sidebarLayout(
+                                         sidebarPanel(
+                                           selectInput("metodo_cluster_productos", "Método de clustering:",
+                                                       choices = c("K-means" = "kmeans_cluster",
+                                                                   "Jerárquico" = "hc_cluster")),
+                                           sliderInput("n_productos", "Número de productos a mostrar:",
+                                                       min = 3, max = 10, value = 5)
+                                         ),
+                                         mainPanel(
+                                           plotlyOutput("productos_por_cluster", height = "800px")
+                                         )
+                                       )
+                                     )
                             )
                           )
                  ),
@@ -170,31 +186,93 @@ server <- function(input, output) {
   })
 
   output$prodcliente <- renderPlotly({
-    clientes_recurrentes <- data_completa %>%
-      group_by(id_cliente_enc) %>%
-      summarise(dias_compra = n_distinct(dia)) %>%
-      filter(dias_compra > 1) %>%
-      pull(id_cliente_enc)
+    # Verificar que los datos estén cargados correctamente
+    req(data_completa)
 
-    # Comparativa top productos
-    p <- data_completa %>%
-      mutate(tipo_cliente = ifelse(id_cliente_enc %in% clientes_recurrentes,
-                                   "Recurrentes", "Ocasionales")) %>%
-      group_by(tipo_cliente, descripcion) %>%
-      summarise(total = n()) %>%
-      group_by(tipo_cliente) %>%
-      slice_max(order_by = total, n = 10) %>%
-      ggplot(aes(x = reorder(descripcion, total), y = total, fill = tipo_cliente)) +
-      geom_col() +
-      coord_flip() +
-      facet_wrap(~tipo_cliente, scales = "free_y") +
-      scale_fill_manual(values = c(eroski_rojo, eroski_azul)) +
-      labs(title = "Top productos: Recurrentes vs Ocasionales",
-           x = "Producto",
-           y = "Cantidad vendida") +
-      tema_eroski() +
-      theme(legend.position = "none")
-    ggplotly(p)
+    tryCatch({
+      # Paso 1: Calcular frecuencia de compra por cliente y producto
+      productos_cliente <- data_completa %>%
+        group_by(id_cliente_enc, descripcion) %>%
+        summarise(veces_comprado = n(), .groups = 'drop')
+
+      # Paso 2: Identificar productos con al menos un cliente que los recompró
+      productos_recurrentes <- productos_cliente %>%
+        filter(veces_comprado > 1) %>%
+        distinct(descripcion) %>%
+        mutate(tipo = "Recurrente")
+
+      # Paso 3: Clasificación definitiva de productos
+      clasificacion_final <- productos_cliente %>%
+        group_by(descripcion) %>%
+        summarise(
+          total_compras = sum(veces_comprado),
+          clientes_unicos = n_distinct(id_cliente_enc),
+          clientes_recurrentes = sum(veces_comprado > 1),
+          .groups = 'drop'
+        ) %>%
+        left_join(productos_recurrentes, by = "descripcion") %>%
+        mutate(
+          tipo = ifelse(is.na(tipo), "Ocasional", tipo),
+          ratio_recompra = clientes_recurrentes / clientes_unicos
+        )
+
+      # Paso 4: Seleccionar tops excluyendo duplicados
+      top_recurrentes <- clasificacion_final %>%
+        filter(tipo == "Recurrente") %>%
+        slice_max(order_by = clientes_recurrentes, n = 10)
+
+      top_ocasionales <- clasificacion_final %>%
+        filter(tipo == "Ocasional") %>%
+        slice_max(order_by = clientes_unicos, n = 10) %>%
+        anti_join(top_recurrentes, by = "descripcion")
+
+      # Paso 5: Preparar datos para visualización
+      datos_visualizacion <- bind_rows(
+        top_recurrentes %>% mutate(categoria = "Recurrentes (recomprados)"),
+        top_ocasionales %>% mutate(categoria = "Ocasionales (no recomprados)")
+      ) %>%
+        mutate(descripcion = fct_reorder(descripcion, clientes_unicos))
+
+      # Paso 6: Crear el gráfico
+      p <- ggplot(datos_visualizacion,
+                  aes(x = descripcion,
+                      y = ifelse(categoria == "Recurrentes (recomprados)",
+                                 clientes_recurrentes,
+                                 clientes_unicos),
+                      fill = categoria,
+                      text = paste(
+                        "Producto:", descripcion,
+                        "<br>Categoría:", categoria,
+                        "<br>Total compras:", total_compras,
+                        "<br>Clientes únicos:", clientes_unicos,
+                        ifelse(categoria == "Recurrentes (recomprados)",
+                               paste("<br>Clientes que recompraban:", clientes_recurrentes),
+                               "")
+                      ))) +
+        geom_col() +
+        coord_flip() +
+        facet_wrap(~categoria, scales = "free_y", ncol = 1) +
+        scale_fill_manual(values = c("Recurrentes (recomprados)" = "#F20505",
+                                     "Ocasionales (no recomprados)" = "#0367A6")) +
+        labs(title = "Top productos por patrón de compra",
+             subtitle = "Productos recurrentes vs ocasionales",
+             x = "",
+             y = "Número de clientes") +
+        theme_minimal() +
+        theme(legend.position = "none",
+              strip.text = element_text(size = 12, face = "bold"),
+              plot.title = element_text(size = 16, face = "bold"),
+              plot.subtitle = element_text(size = 12),
+              axis.text.y = element_text(size = 10))
+
+      ggplotly(p, tooltip = "text") %>%
+        layout(margin = list(l = 150, r = 50),
+               hoverlabel = list(bgcolor = "white"))
+
+    }, error = function(e) {
+      showNotification(paste("Error:", e$message), type = "error")
+      return(NULL)
+    })
   })
   output$evol_semanal <- renderPlotly({
     req(input$rango_fechas)  # Asegurarse que hay fechas seleccionadas
@@ -366,6 +444,60 @@ server <- function(input, output) {
 
     ggplotly(p, tooltip = "text")
   })
+  output$productos_por_cluster <- renderPlotly({
+    req(datos_completos, data_completa)
+
+    tryCatch({
+      # 1. Unir datos de clusters con transacciones
+      datos_con_cluster <- data_completa %>%
+        left_join(datos_completos %>%
+                    select(id_cliente_enc, cluster = .data[[input$metodo_cluster_productos]]),
+                  by = "id_cliente_enc") %>%
+        filter(!is.na(cluster))
+
+      # 2. Calcular top productos por cluster
+      top_productos_cluster <- datos_con_cluster %>%
+        group_by(cluster, descripcion) %>%
+        summarise(
+          total_compras = n(),
+          clientes_unicos = n_distinct(id_cliente_enc),
+          .groups = 'drop'
+        ) %>%
+        group_by(cluster) %>%
+        slice_max(order_by = total_compras, n = 5) %>%
+        ungroup() %>%
+        mutate(cluster = paste("Cluster", cluster),
+               descripcion = fct_reorder(descripcion, total_compras))
+
+      # 3. Visualización
+      p <- ggplot(top_productos_cluster,
+                  aes(x = descripcion, y = total_compras, fill = cluster,
+                      text = paste("Cluster:", cluster,
+                                   "<br>Producto:", descripcion,
+                                   "<br>Total compras:", total_compras,
+                                   "<br>Clientes únicos:", clientes_unicos))) +
+        geom_col(show.legend = FALSE) +
+        coord_flip() +
+        facet_wrap(~cluster, scales = "free_y", ncol = 1) +
+        scale_fill_manual(values = c("#0367A6", "#F20505", "#04B2D9")) +
+        labs(title = "Top 5 productos más comprados por cluster",
+             x = "",
+             y = "Total de compras") +
+        theme_minimal() +
+        theme(strip.text = element_text(face = "bold", size = 12),
+              plot.title = element_text(size = 16, face = "bold"),
+              axis.text.y = element_text(size = 10))
+
+      ggplotly(p, tooltip = "text") %>%
+        layout(margin = list(l = 150, r = 50),
+               hoverlabel = list(bgcolor = "white"))
+
+    }, error = function(e) {
+      showNotification(paste("Error:", e$message), type = "error")
+      return(NULL)
+    })
+  })
+
 }
 
 
