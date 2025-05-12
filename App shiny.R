@@ -15,6 +15,7 @@ tickets_enc$num_ticket <- as.character(tickets_enc$num_ticket)
 tickets_enc$dia <- ymd(tickets_enc$dia)
 data_completa <- tickets_enc %>%
   left_join(maestrostr, by = "cod_est")
+datos_completos <- read.csv("DATOS/DatosShiny.csv")
 
 # Paleta y tema
 eroski_rojo <- "#F20505"
@@ -34,32 +35,92 @@ tema_eroski <- function(base_size = 12) {
 ui <- navbarPage("Reto 4: Eroski",
 
                  tabPanel("1 - Análisis Exploratorio",
-         fluidPage(
-           h4("Selecciona un gráfico para visualizar"),
-           selectInput("grafico_seleccionado", "Gráfico:", choices = list(
-             "Top 20 productos más vendidos" = "top",
-             "Compras totales por día" = "dia",
-             "Evolución semanal compras" = "semana",
-             "Intervalos de días entre compras" = "intervalos"
-           )),
-           conditionalPanel("input.grafico_seleccionado == 'top'", plotlyOutput("top_productos")),
-           conditionalPanel("input.grafico_seleccionado == 'dia'", plotlyOutput("compras_dia")),
-           conditionalPanel("input.grafico_seleccionado == 'semana'", plotlyOutput("evol_semanal")),
-           conditionalPanel("input.grafico_seleccionado == 'intervalos'", plotlyOutput("intervalos"))
-         )
-),
+                          fluidPage(
+                            h4("Selecciona un gráfico para visualizar"),
+                            selectInput("grafico_seleccionado", "Gráfico:", choices = list(
+                              "Top 20 productos más vendidos" = "top",
+                              "Compras totales por día" = "dia",
+                              "Evolución semanal compras" = "semana",
+                              "Intervalos de días entre compras" = "intervalos",
+                              "Top productos: Recurrentes vs Ocasionales" = "cliente"
+                            )),
+                            conditionalPanel("input.grafico_seleccionado == 'top'", plotlyOutput("top_productos")),
+                            conditionalPanel("input.grafico_seleccionado == 'dia'", plotlyOutput("compras_dia")),
+                            conditionalPanel("input.grafico_seleccionado == 'semana'",
+                                             dateRangeInput("rango_fechas", "Selecciona rango de fechas:",
+                                                            start = min(data_completa$dia),
+                                                            end = max(data_completa$dia),
+                                                            min = min(data_completa$dia),
+                                                            max = max(data_completa$dia),
+                                                            language = "es",
+                                                            separator = " a "),
+                                             plotlyOutput("evol_semanal")),
+                            conditionalPanel("input.grafico_seleccionado == 'intervalos'", plotlyOutput("intervalos")),
+                            conditionalPanel("input.grafico_seleccionado == 'cliente'", plotlyOutput("prodcliente"))
+                          )
+                 ),
 
                  tabPanel("2 - Clusterización",
                           fluidPage(
-                            h3("Segmentación de clientes (k-means)"),
-                            sliderInput("clusters", "Número de clusters", min = 2, max = 6, value = 3),
-                            plotOutput("kmeans_plot")
+                            h3("Segmentación de clientes"),
+                            tabsetPanel(
+                              tabPanel("Gráfico Radar",
+                                       fluidPage(
+                                         sidebarLayout(
+                                           sidebarPanel(
+                                             selectInput("metodo_radar", "Método de clustering:",
+                                                         choices = c("K-means" = "kmeans_cluster",
+                                                                     "Jerárquico" = "hc_cluster"))
+                                           ),
+                                           mainPanel(
+                                             plotlyOutput("radar_plot", height = "600px")
+                                           )
+                                         )
+                                       )
+                              ),
+                              tabPanel("Boxplots",
+                                       fluidPage(
+                                         sidebarLayout(
+                                           sidebarPanel(
+                                             selectInput("metodo_boxplot", "Método de clustering:",
+                                                         choices = c("K-means" = "kmeans_cluster",
+                                                                     "Jerárquico" = "hc_cluster")),
+                                             selectInput("variable_boxplot", "Variable a visualizar:",
+                                                         choices = c("Total productos" = "total_productos",
+                                                                     "Productos distintos" = "productos_distintos",
+                                                                     "Días activos" = "dias_activos",
+                                                                     "Compras por semana" = "compras_por_semana",
+                                                                     "Compras entre semana" = "compras_entre_semana",
+                                                                     "Compras fin de semana" = "compras_fin_de_semana")),
+                                             helpText("Visualización para los 3 clusters predefinidos")
+                                           ),
+                                           mainPanel(
+                                             plotlyOutput("boxplot_clusters", height = "500px")
+                                           )
+                                         )
+                                       )
+                              ),
+                              tabPanel("Distribución Compras",
+                                       fluidPage(
+                                         sidebarLayout(
+                                           sidebarPanel(
+                                             selectInput("metodo_distrib", "Método de clustering:",
+                                                         choices = c("K-means" = "kmeans_cluster",
+                                                                     "Jerárquico" = "hc_cluster"))
+                                           ),
+                                           mainPanel(
+                                             plotlyOutput("distrib_compras", height = "500px")
+                                           )
+                                         )
+                                       )
+                              )
+                            )
                           )
                  ),
 
                  tabPanel("3 - Resultados de Modelos",
                           fluidPage(
-                            h3("Modelo predictivo (Ejemplo)"),
+                            h3("Modelo predictivo"),
                             verbatimTextOutput("modelo_output")
                           )
                  ),
@@ -74,7 +135,6 @@ ui <- navbarPage("Reto 4: Eroski",
 
 # Server
 server <- function(input, output) {
-
   output$top_productos <-  renderPlotly({
     top_productos <- data_completa %>%
       count(descripcion, sort = TRUE) %>%
@@ -109,10 +169,46 @@ server <- function(input, output) {
     ggplotly(p, tooltip = "text")
   })
 
+  output$prodcliente <- renderPlotly({
+    clientes_recurrentes <- data_completa %>%
+      group_by(id_cliente_enc) %>%
+      summarise(dias_compra = n_distinct(dia)) %>%
+      filter(dias_compra > 1) %>%
+      pull(id_cliente_enc)
+
+    # Comparativa top productos
+    p <- data_completa %>%
+      mutate(tipo_cliente = ifelse(id_cliente_enc %in% clientes_recurrentes,
+                                   "Recurrentes", "Ocasionales")) %>%
+      group_by(tipo_cliente, descripcion) %>%
+      summarise(total = n()) %>%
+      group_by(tipo_cliente) %>%
+      slice_max(order_by = total, n = 10) %>%
+      ggplot(aes(x = reorder(descripcion, total), y = total, fill = tipo_cliente)) +
+      geom_col() +
+      coord_flip() +
+      facet_wrap(~tipo_cliente, scales = "free_y") +
+      scale_fill_manual(values = c(eroski_rojo, eroski_azul)) +
+      labs(title = "Top productos: Recurrentes vs Ocasionales",
+           x = "Producto",
+           y = "Cantidad vendida") +
+      tema_eroski() +
+      theme(legend.position = "none")
+    ggplotly(p)
+  })
   output$evol_semanal <- renderPlotly({
+    req(input$rango_fechas)  # Asegurarse que hay fechas seleccionadas
+
     dfsemanas <- data_completa %>%
+      filter(dia >= input$rango_fechas[1] & dia <= input$rango_fechas[2]) %>%
       mutate(semana = floor_date(dia, "week")) %>%
       count(semana)
+
+    # Verificar que hay datos después del filtrado
+    validate(
+      need(nrow(dfsemanas) > 0, "No hay datos disponibles para el rango de fechas seleccionado")
+    )
+
     p <- plot_ly(
       data = dfsemanas,
       x = ~semana,
@@ -123,7 +219,14 @@ server <- function(input, output) {
       marker = list(color = eroski_azul, size = 8)
     ) %>%
       layout(
-        title = list(text = "Compras semanales"),
+        title = list(
+          text = "Compras semanales",
+          x = 0.15,
+          font = list(
+            color = "black",
+            size=20
+          )
+        ),
         xaxis = list(
           title = "Semana",
           gridcolor = "#DADADA",
@@ -135,72 +238,137 @@ server <- function(input, output) {
           zeroline = FALSE
         ),
         plot_bgcolor = eroski_fondo,
-        paper_bgcolor = eroski_fondo,
-        font = list(color = eroski_gris)
+        paper_bgcolor = eroski_fondo
       )
     p
   })
-?lag()
   output$intervalos <- renderPlotly({
-      intervalos_dias <- data_completa %>%
-        arrange(id_cliente_enc, dia) %>%
-        group_by(id_cliente_enc) %>%
-        mutate(dias_entre_compras = as.numeric(difftime(dia, lag(dia), units = "days"))) %>%
-        ungroup() %>%
-        filter(!is.na(dias_entre_compras) & dias_entre_compras > 0)
-
-      p <- ggplot(intervalos_dias, aes(x = dias_entre_compras,
-                                       text = paste("Días entre compras:", round(dias_entre_compras, 1)))) +
-        geom_histogram(bins = 30, fill = eroski_azul, color = "white") +
-        labs(
-          title = "Distribución de días entre compras",
-          x = "Días entre compras",
-          y = "Número de casos"
-        ) +
-        tema_eroski() +
-        scale_x_continuous(limits = c(0,30))
-
-      ggplotly(p, tooltip = "text")
-    })
-
-  output$kmeans_plot <- renderPlot({
-    habitos_cliente <- data_completa %>%
+    intervalos_dias <- data_completa %>%
+      arrange(id_cliente_enc, dia) %>%
       group_by(id_cliente_enc) %>%
-      summarise(
-        total_productos = n(),
-        tickets_distintos = n_distinct(num_ticket),
-        dias_compra = n_distinct(dia),
-        productos_distintos = n_distinct(descripcion)
-      )
-    habitos_scaled <- scale(habitos_cliente[,-1])
-    set.seed(123)
-    km <- kmeans(habitos_scaled, centers = input$clusters)
-    habitos_cliente$cluster <- factor(km$cluster)
-    ggplot(habitos_cliente, aes(x = total_productos, y = productos_distintos, color = cluster)) +
-      geom_point() +
-      labs(x = "Total productos", y = "Productos distintos") +
+      mutate(dias_entre_compras = as.numeric(difftime(dia, lag(dia), units = "days"))) %>%
+      ungroup() %>%
+      filter(!is.na(dias_entre_compras) & dias_entre_compras > 0) %>%
+      # Crear intervalos/bins manualmente para el bar plot
+      mutate(intervalo = cut(dias_entre_compras, breaks = seq(0, 30, by = 1), right = FALSE)) %>%
+      count(intervalo)
+
+    p <- ggplot(intervalos_dias, aes(x = intervalo, y = n,
+                                     text = paste("Intervalo:", intervalo, "<br>Número de casos:", n))) +
+      geom_bar(stat = "identity", fill = eroski_azul, color = "white") +
+      labs(
+        title = "Distribución de días entre compras",
+        x = "Días entre compras",
+        y = "Número de casos"
+      ) +
       tema_eroski()
-  })
 
-  output$modelo_output <- renderPrint({
-    # Ejemplo simple: regresión lineal de productos vs tickets
-    habitos_cliente <- data_completa %>%
-      group_by(id_cliente_enc) %>%
-      summarise(
-        total_productos = n(),
-        tickets_distintos = n_distinct(num_ticket)
+    ggplotly(p, tooltip = "text") %>%
+      layout(xaxis = list(tickangle = -45)) # Ajustar ángulo en Plotly
+  })
+  # Gráfico Radar
+  output$radar_plot <- renderPlotly({
+    req(datos_completos)
+
+    # Calcular centroides para los 3 clusters
+    centroides <- datos_completos %>%
+      group_by(cluster = .data[[input$metodo_radar]]) %>%
+      summarise(across(c(total_productos, productos_distintos, dias_activos,
+                         compras_por_semana, compras_entre_semana,
+                         compras_fin_de_semana), mean)) %>%
+      select(-cluster)
+
+    # Preparar datos para radar plot
+    variables <- colnames(centroides)
+    n_vars <- length(variables)
+
+    # Crear el gráfico radar interactivo
+    fig <- plot_ly(type = 'scatterpolar',
+                   fill = 'toself') %>%
+      layout(
+        polar = list(
+          radialaxis = list(
+            visible = TRUE,
+            range = c(0, max(centroides)*1.1)
+          )
+        ),
+        title = paste("Perfil de los 3 Clusters -",
+                      ifelse(input$metodo_radar == "kmeans_cluster", "K-means", "Jerárquico")),
+        showlegend = TRUE
       )
-    modelo <- lm(total_productos ~ tickets_distintos, data = habitos_cliente)
-    summary(modelo)
-  })
 
-  output$kpi_table <- renderTable({
-    tibble::tibble(
-      "Total de clientes" = n_distinct(data_completa$id_cliente_enc),
-      "Total de productos vendidos" = nrow(data_completa),
-      "Total de tickets" = n_distinct(data_completa$num_ticket)
-    )
+    # Añadir cada cluster al gráfico
+    colors <- c("#0367A6", "#F20505", "#04B2D9")  # Azul Eroski, Rojo Eroski, Azul claro
+
+    for(i in 1:nrow(centroides)) {
+      fig <- fig %>%
+        add_trace(
+          r = as.numeric(centroides[i, ]),
+          theta = variables,
+          name = paste("Cluster", i),
+          fillcolor = alpha(colors[i], 0.3),
+          line = list(color = colors[i], width = 2),
+          hoverinfo = "text",
+          text = paste0(variables, ": ", round(as.numeric(centroides[i, ]), 2)
+          ))
+    }
+
+    fig
+  })
+  # Boxplots
+  output$boxplot_clusters <- renderPlotly({
+    req(datos_completos)
+
+    # Crear boxplot para los 3 clusters
+    p <- ggplot(datos_completos, aes(x = factor(.data[[input$metodo_boxplot]]),
+                                     y = .data[[input$variable_boxplot]],
+                                     fill = factor(.data[[input$metodo_boxplot]]))) +
+      geom_boxplot() +
+      scale_fill_manual(values = c("#0367A6", "#F20505", "#04B2D9")) +
+      labs(title = paste("Distribución de", gsub("_", " ", input$variable_boxplot)),
+           subtitle = paste("Método:", ifelse(input$metodo_boxplot == "kmeans_cluster", "K-means", "Jerárquico")),
+           x = "Cluster",
+           y = NULL,
+           fill="Cluster") +
+      theme_minimal() +
+      theme(legend.position = "none",
+            plot.title = element_text(size = 16, face = "bold"),
+            plot.subtitle = element_text(size = 12),
+            axis.text = element_text(size = 11),
+            axis.title = element_text(size = 12))+
+      tema_eroski()
+    ggplotly(p, tooltip = "text")
+  })
+  output$distrib_compras <- renderPlotly({
+    req(datos_completos)
+
+    # Preparar datos para el gráfico de barras apiladas
+    datos_distrib <- datos_completos %>%
+      mutate(cluster = factor(.data[[input$metodo_distrib]])) %>%
+      group_by(cluster) %>%
+      summarise(
+        Entre_Semana = mean(compras_entre_semana),
+        Fin_de_Semana = mean(compras_fin_de_semana)
+      ) %>%
+      pivot_longer(cols = c(Entre_Semana, Fin_de_Semana),
+                   names_to = "Tipo", values_to = "Porcentaje")
+
+    # Crear gráfico de barras apiladas
+    p <- ggplot(datos_distrib, aes(x = cluster, y = Porcentaje, fill = Tipo,
+                                   text = paste("Cluster:", cluster, "<br>Tipo:", Tipo,
+                                                "<br>Porcentaje:", round(Porcentaje, 2)))) +
+      geom_bar(stat = "identity", position = "stack") +
+      scale_fill_manual(values = c(eroski_azul, eroski_rojo)) +
+      labs(title = "Distribución de compras por tipo de día",
+           x = "Cluster",
+           y = "Proporción de compras") +
+      tema_eroski()
+
+    ggplotly(p, tooltip = "text")
   })
 }
 
+
 shinyApp(ui, server)
+
+
