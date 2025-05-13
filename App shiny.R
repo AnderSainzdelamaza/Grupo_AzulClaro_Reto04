@@ -31,6 +31,16 @@ tema_eroski <- function(base_size = 12) {
           panel.grid.minor = element_blank())
 }
 
+reorder_within <- function(x, by, within, fun = mean, sep = "_") {
+  new_x <- paste(x, within, sep = sep)
+  stats::reorder(new_x, by, fun)
+}
+
+scale_x_reordered <- function(..., sep = "_") {
+  reg <- paste0(sep, ".+$")
+  ggplot2::scale_x_discrete(labels = function(x) gsub(reg, "", x), ...)
+}
+
 # UI
 ui <- navbarPage("Reto 4: Eroski",
 
@@ -113,24 +123,32 @@ ui <- navbarPage("Reto 4: Eroski",
                                            )
                                          )
                                        )
-                              )
-                            ),
-                            tabPanel("Productos por Cluster",
-                                     fluidPage(
-                                       sidebarLayout(
-                                         sidebarPanel(
-                                           selectInput("metodo_cluster_productos", "Método de clustering:",
-                                                       choices = c("K-means" = "kmeans_cluster",
-                                                                   "Jerárquico" = "hc_cluster")),
-                                           sliderInput("n_productos", "Número de productos a mostrar:",
-                                                       min = 3, max = 10, value = 5)
-                                         ),
-                                         mainPanel(
-                                           plotlyOutput("productos_por_cluster", height = "800px")
+                              ),
+                              tabPanel("Productos por Cluster",
+                                       fluidPage(
+                                         sidebarLayout(
+                                           sidebarPanel(
+                                             selectInput("metodo_cluster_productos", "Método de clustering:",
+                                                         choices = c("K-means" = "kmeans_cluster",
+                                                                     "Jerárquico" = "hc_cluster")),
+                                             sliderInput("n_productos", "Número de productos a mostrar:",
+                                                         min = 3, max = 10, value = 5),
+                                             dateRangeInput("rango_fechas_productos", "Rango de fechas:",
+                                                            start = min(data_completa$dia),
+                                                            end = max(data_completa$dia)),
+                                             actionButton("ejecutar_analisis", "Ejecutar Análisis",
+                                                          icon = icon("play"),
+                                                          class = "btn-primary")
+                                           ),
+                                           mainPanel(
+                                             plotlyOutput("productos_cluster1", width = "100%"),
+                                             plotlyOutput("productos_cluster2", width = "100%"),
+                                             plotlyOutput("productos_cluster3", width = "100%")
+                                           )
                                          )
                                        )
-                                     )
-                            )
+                              )
+                            ),
                           )
                  ),
 
@@ -444,60 +462,122 @@ server <- function(input, output) {
 
     ggplotly(p, tooltip = "text")
   })
-  output$productos_por_cluster <- renderPlotly({
-    req(datos_completos, data_completa)
+  # Gráfico para Cluster 1
+  output$productos_cluster1 <- renderPlotly({
+    req(input$ejecutar_analisis)
 
-    tryCatch({
-      # 1. Unir datos de clusters con transacciones
-      datos_con_cluster <- data_completa %>%
-        left_join(datos_completos %>%
-                    select(id_cliente_enc, cluster = .data[[input$metodo_cluster_productos]]),
-                  by = "id_cliente_enc") %>%
-        filter(!is.na(cluster))
+    isolate({
+      req(datos_completos, data_completa)
 
-      # 2. Calcular top productos por cluster
-      top_productos_cluster <- datos_con_cluster %>%
-        group_by(cluster, descripcion) %>%
-        summarise(
-          total_compras = n(),
-          clientes_unicos = n_distinct(id_cliente_enc),
-          .groups = 'drop'
-        ) %>%
-        group_by(cluster) %>%
-        slice_max(order_by = total_compras, n = 5) %>%
-        ungroup() %>%
-        mutate(cluster = paste("Cluster", cluster),
-               descripcion = fct_reorder(descripcion, total_compras))
+      tryCatch({
+        datos_filtrados <- data_completa %>%
+          filter(dia >= input$rango_fechas_productos[1] &
+                   dia <= input$rango_fechas_productos[2]) %>%
+          left_join(datos_completos %>%
+                      select(id_cliente_enc, cluster = .data[[input$metodo_cluster_productos]]),
+                    by = "id_cliente_enc") %>%
+          filter(cluster == 1)  # Filtro específico para Cluster 1
 
-      # 3. Visualización
-      p <- ggplot(top_productos_cluster,
-                  aes(x = descripcion, y = total_compras, fill = cluster,
-                      text = paste("Cluster:", cluster,
-                                   "<br>Producto:", descripcion,
-                                   "<br>Total compras:", total_compras,
-                                   "<br>Clientes únicos:", clientes_unicos))) +
-        geom_col(show.legend = FALSE) +
-        coord_flip() +
-        facet_wrap(~cluster, scales = "free_y", ncol = 1) +
-        scale_fill_manual(values = c("#0367A6", "#F20505", "#04B2D9")) +
-        labs(title = "Top 5 productos más comprados por cluster",
-             x = "",
-             y = "Total de compras") +
-        theme_minimal() +
-        theme(strip.text = element_text(face = "bold", size = 12),
-              plot.title = element_text(size = 16, face = "bold"),
-              axis.text.y = element_text(size = 10))
+        top_productos <- datos_filtrados %>%
+          count(descripcion, name = "total_compras") %>%
+          slice_max(order_by = total_compras, n = input$n_productos) %>%
+          mutate(descripcion = fct_reorder(descripcion, total_compras))
 
-      ggplotly(p, tooltip = "text") %>%
-        layout(margin = list(l = 150, r = 50),
-               hoverlabel = list(bgcolor = "white"))
+        p <- ggplot(top_productos, aes(x = descripcion, y = total_compras,
+                                       text = paste("Producto:", descripcion,
+                                                    "<br>Total compras:", total_compras))) +
+          geom_col(fill = "#0367A6") +
+          coord_flip() +
+          labs(title = "Cluster 1: Productos más comprados",
+               x = "", y = "Total compras") +
+          theme_minimal()
 
-    }, error = function(e) {
-      showNotification(paste("Error:", e$message), type = "error")
-      return(NULL)
+        ggplotly(p, tooltip = "text")
+
+      }, error = function(e) {
+        showNotification(paste("Error en Cluster 1:", e$message), type = "error")
+        return(NULL)
+      })
     })
   })
 
+  # Gráfico para Cluster 2
+  output$productos_cluster2 <- renderPlotly({
+    req(input$ejecutar_analisis)
+
+    isolate({
+      req(datos_completos, data_completa)
+
+      tryCatch({
+        datos_filtrados <- data_completa %>%
+          filter(dia >= input$rango_fechas_productos[1] &
+                   dia <= input$rango_fechas_productos[2]) %>%
+          left_join(datos_completos %>%
+                      select(id_cliente_enc, cluster = .data[[input$metodo_cluster_productos]]),
+                    by = "id_cliente_enc") %>%
+          filter(cluster == 2)  # Filtro específico para Cluster 2
+
+        top_productos <- datos_filtrados %>%
+          count(descripcion, name = "total_compras") %>%
+          slice_max(order_by = total_compras, n = input$n_productos) %>%
+          mutate(descripcion = fct_reorder(descripcion, total_compras))
+
+        p <- ggplot(top_productos, aes(x = descripcion, y = total_compras,
+                                       text = paste("Producto:", descripcion,
+                                                    "<br>Total compras:", total_compras))) +
+          geom_col(fill = "#F20505") +
+          coord_flip() +
+          labs(title = "Cluster 2: Productos más comprados",
+               x = "", y = "Total compras") +
+          theme_minimal()
+
+        ggplotly(p, tooltip = "text")
+
+      }, error = function(e) {
+        showNotification(paste("Error en Cluster 2:", e$message), type = "error")
+        return(NULL)
+      })
+    })
+  })
+
+  # Gráfico para Cluster 3
+  output$productos_cluster3 <- renderPlotly({
+    req(input$ejecutar_analisis)
+
+    isolate({
+      req(datos_completos, data_completa)
+
+      tryCatch({
+        datos_filtrados <- data_completa %>%
+          filter(dia >= input$rango_fechas_productos[1] &
+                   dia <= input$rango_fechas_productos[2]) %>%
+          left_join(datos_completos %>%
+                      select(id_cliente_enc, cluster = .data[[input$metodo_cluster_productos]]),
+                    by = "id_cliente_enc") %>%
+          filter(cluster == 3)  # Filtro específico para Cluster 3
+
+        top_productos <- datos_filtrados %>%
+          count(descripcion, name = "total_compras") %>%
+          slice_max(order_by = total_compras, n = input$n_productos) %>%
+          mutate(descripcion = fct_reorder(descripcion, total_compras))
+
+        p <- ggplot(top_productos, aes(x = descripcion, y = total_compras,
+                                       text = paste("Producto:", descripcion,
+                                                    "<br>Total compras:", total_compras))) +
+          geom_col(fill = "#04B2D9") +
+          coord_flip() +
+          labs(title = "Cluster 3: Productos más comprados",
+               x = "", y = "Total compras") +
+          theme_minimal()
+
+        ggplotly(p, tooltip = "text")
+
+      }, error = function(e) {
+        showNotification(paste("Error en Cluster 3:", e$message), type = "error")
+        return(NULL)
+      })
+    })
+  })
 }
 
 
