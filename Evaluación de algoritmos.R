@@ -142,6 +142,17 @@ comp_bi_nor
 rownames(comp_rat) <- c("RANDOM_NOR", "IBCF_NOR", "UBCF_NOR", "SVDF_NOR", "POPULAR_NOR")
 r<-round(comp_bi_nor,4)
 
+# Guardar datos para App de Shiny
+
+write.csv(comp_bi_nor, "DATOS/Datos Shiny/resultados_topn_comparativa.csv", row.names = TRUE)
+write.csv(comp_rat, "DATOS/Datos Shiny/resultados_ratings_comparativa.csv", row.names = TRUE)
+
+write.csv(comp_topNList, "DATOS/Datos Shiny/resultados_topn_individuales.csv", row.names = TRUE)
+write.csv(comp_topNList2, "DATOS/Datos Shiny/resultados_topn_binarizados.csv", row.names = TRUE)
+
+write.csv(comp_rat, "DATOS/Datos Shiny/resultados_ratings_individuales.csv", row.names = TRUE)
+
+write.csv(comp_bi_nor, "DATOS/Datos Shiny/resultados_topn_comparativa.csv", row.names = TRUE)
 
 library(shiny)
 library(DT)
