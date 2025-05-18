@@ -150,9 +150,21 @@ write.csv(comp_rat, "DATOS/Datos Shiny/resultados_ratings_comparativa.csv", row.
 write.csv(comp_topNList, "DATOS/Datos Shiny/resultados_topn_individuales.csv", row.names = TRUE)
 write.csv(comp_topNList2, "DATOS/Datos Shiny/resultados_topn_binarizados.csv", row.names = TRUE)
 
-write.csv(comp_rat, "DATOS/Datos Shiny/resultados_ratings_individuales.csv", row.names = TRUE)
+# Crear directorio si no existe
+if(!dir.exists("modelos")) dir.create("modelos")
 
-write.csv(comp_bi_nor, "DATOS/Datos Shiny/resultados_topn_comparativa.csv", row.names = TRUE)
+# Guardar todos los modelos
+saveRDS(rec_model_RANDOM, "modelos/rec_model_RANDOM.rds")
+saveRDS(rec_model_IBCF, "modelos/rec_model_IBCF.rds")
+saveRDS(rec_model_UBCF, "modelos/rec_model_UBCF.rds")
+saveRDS(rec_model_POPULAR, "modelos/rec_model_POPULAR.rds")
+saveRDS(rec_model_svdf, "modelos/rec_model_SVDF.rds")
+
+# también los modelos binarizados:
+saveRDS(rec_model_RANDOM2, "modelos/rec_model_RANDOM2.rds")
+saveRDS(rec_model_IBCF2, "modelos/rec_model_IBCF2.rds")
+saveRDS(rec_model_UBCF2, "modelos/rec_model_UBCF2.rds")
+saveRDS(rec_model_POPULAR2, "modelos/rec_model_POPULAR2.rds")
 
 library(shiny)
 library(DT)
