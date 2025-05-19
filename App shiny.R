@@ -214,7 +214,6 @@ ui <- navbarPage("Reto 4: Eroski",
                                                     selectInput("metrica_topn", "Métrica a visualizar:",
                                                                 choices = c("Precision" = "precision",
                                                                             "Recall" = "recall",
-                                                                            "F1" = "F1",
                                                                             "TPR" = "TPR",
                                                                             "FPR" = "FPR"))
                                                   ),
