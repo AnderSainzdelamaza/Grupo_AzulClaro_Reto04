@@ -233,20 +233,17 @@ ui <- navbarPage("Reto 4: Eroski",
                                        # Aquí irán las visualizaciones del objetivo 2
                               ),
 
-                              tabPanel("Objetivo 3 - Recomendaciones",
+                              tabPanel("Objetivo 3 - ...",
                                        fluidPage(
                                          h3("Objetivo 3 - Recomendación de Productos por Usuario (Feedback Implícito)"),
-
                                          h4("Recomendaciones por Modelo Implícito (No Binaria)"),
-                                         DT::dataTableOutput("tabla_recomendaciones_obj3"),
-
+                                         dataTableOutput("tabla_recomendaciones_obj3"),
                                          h4("Recomendaciones por Modelo Binario"),
-                                         DT::dataTableOutput("tabla_recomendaciones_obj3_bin"),
-
+                                         dataTableOutput("tabla_recomendaciones_obj3_bin"),
                                          h4("Comparación entre ambos modelos"),
-                                         DT::dataTableOutput("tabla_comparacion_modelos")
-                                       )
-                              ),
+                                         dataTableOutput("tabla_comparacion_modelos"),
+                                         )
+                                       ),
 
                               tabPanel("Objetivo 4 - ...",
                                        h4("Contenido futuro para Objetivo 4")
@@ -1003,22 +1000,24 @@ server <- function(input, output) {
       rownames = FALSE
     )
   })
-  output$tabla_recomendaciones_obj3 <- DT::renderDataTable({
-    DT::datatable(
+  output$tabla_recomendaciones_obj3 <- renderDataTable({
+    datatable(
       prods,
       options = list(pageLength = 10, autoWidth = TRUE),
       rownames = FALSE
     )
   })
-  output$tabla_recomendaciones_obj3_bin <- DT::renderDataTable({
-    DT::datatable(
+
+
+  output$tabla_recomendaciones_obj3_bin <- renderDataTable({
+    datatable(
       prods2,
       options = list(pageLength = 10, autoWidth = TRUE),
       rownames = FALSE
     )
   })
-  output$tabla_comparacion_modelos <- DT::renderDataTable({
-    DT::datatable(
+  output$tabla_comparacion_modelos <- renderDataTable({
+    datatable(
       comparacion,
       options = list(pageLength = 10, autoWidth = TRUE),
       rownames = FALSE
