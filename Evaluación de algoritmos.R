@@ -187,6 +187,7 @@ comp_bi_nor <- rbind(comp_topNList2, comp_topNList)
 round(comp_bi_nor, 4)
 
 # Guardar datos para App de Shiny
+
 write.csv(comp_bi_nor, "DATOS/Datos Shiny/resultados_topn_comparativa.csv", row.names = TRUE)
 write.csv(comp_rat, "DATOS/Datos Shiny/resultados_ratings_comparativa.csv", row.names = TRUE)
 
