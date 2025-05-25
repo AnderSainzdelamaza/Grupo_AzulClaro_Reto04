@@ -32,6 +32,9 @@ str(comp_rat)
 ## Datos objetivos
 df_clientes_recomendados <- read.csv("DATOS/Datos Shiny/df_clientes_recomendados.csv")
 df_productos_similares <- read.csv("DATOS/Datos Shiny/df_productos_similares.csv")
+prods <- read.csv("DATOS/Datos Shiny/prods.csv")
+prods2 <- read.csv("DATOS/Datos Shiny/prods2.csv")
+comparacion <- read.csv("DATOS/Datos Shiny/comparacion.csv")
 
 # Paleta y tema
 eroski_rojo <- "#F20505"
@@ -230,8 +233,19 @@ ui <- navbarPage("Reto 4: Eroski",
                                        # Aquí irán las visualizaciones del objetivo 2
                               ),
 
-                              tabPanel("Objetivo 3 - ...",
-                                       h4("Contenido futuro para Objetivo 3")
+                              tabPanel("Objetivo 3 - Recomendaciones",
+                                       fluidPage(
+                                         h3("Objetivo 3 - Recomendación de Productos por Usuario (Feedback Implícito)"),
+
+                                         h4("Recomendaciones por Modelo Implícito (No Binaria)"),
+                                         DT::dataTableOutput("tabla_recomendaciones_obj3"),
+
+                                         h4("Recomendaciones por Modelo Binario"),
+                                         DT::dataTableOutput("tabla_recomendaciones_obj3_bin"),
+
+                                         h4("Comparación entre ambos modelos"),
+                                         DT::dataTableOutput("tabla_comparacion_modelos")
+                                       )
                               ),
 
                               tabPanel("Objetivo 4 - ...",
@@ -985,6 +999,27 @@ server <- function(input, output) {
   output$tabla_productos_similares <- renderDataTable({
     datatable(
       df_productos_similares,
+      options = list(pageLength = 10, autoWidth = TRUE),
+      rownames = FALSE
+    )
+  })
+  output$tabla_recomendaciones_obj3 <- DT::renderDataTable({
+    DT::datatable(
+      prods,
+      options = list(pageLength = 10, autoWidth = TRUE),
+      rownames = FALSE
+    )
+  })
+  output$tabla_recomendaciones_obj3_bin <- DT::renderDataTable({
+    DT::datatable(
+      prods2,
+      options = list(pageLength = 10, autoWidth = TRUE),
+      rownames = FALSE
+    )
+  })
+  output$tabla_comparacion_modelos <- DT::renderDataTable({
+    DT::datatable(
+      comparacion,
       options = list(pageLength = 10, autoWidth = TRUE),
       rownames = FALSE
     )

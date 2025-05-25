@@ -30,6 +30,9 @@ prods <- b %>%
   inner_join(productos, by = "cod_est")
 rownames(prods) <- prods$user_id
 prods$user_id <- NULL
+# Guardar para shiny
+write.csv(prods, "DATOS/Datos Shiny/prods.csv", row.names = T)
+
 unique(prods$descripcion)
 #Hacer similarity para justificar
 ####
@@ -57,8 +60,12 @@ prods2 <- b2 %>%
   inner_join(productos, by = "cod_est")
 rownames(prods2) <- prods2$user_id
 prods2$user_id <- NULL
+write.csv(prods2, "DATOS/Datos Shiny/prods2.csv", row.names = T)
+
 unique(prods2$descripcion)
 comparacion<-cbind(prods,prods2)
+write.csv(comparacion, "DATOS/Datos Shiny/comparacion.csv", row.names = T)
+
 #Similarity
 su<-similarity(as(user_emb2,"realRatingMatrix"),which="users",method="Euclidean")
 su_matriz<-as.matrix(su)
