@@ -1,37 +1,29 @@
-
 # Cargar datos
-tickets <- readRDS("C:/Users/arbai/OneDrive - Mondragon Unibertsitatea/reto 4/DATOS/tickets_enc (1).RDS")
-objetivos <- readRDS("C:/Users/arbai/OneDrive - Mondragon Unibertsitatea/reto 4/DATOS/objetivos (1).RDS")
-maestroestr <- readRDS("C:/Users/arbai/Downloads/maestroestr (1).RDS")
+set.seed(7)
+
+tickets <- readRDS("DATOS/tickets_enc (1).RDS")
+objetivos <- readRDS("DATOS/objetivos (1).RDS")
+maestroestr <- readRDS("DATOS/Datos Originales/maestroestr.RDS")
+
 # Cargar librerías necesarias
 library(data.table)
-library(rsparse)  # Para el algoritmo ALS (Alternating Least Squares)
-library(Matrix)   # Para manejo de matrices dispersas
+library(rsparse)
+library(Matrix)
 
-
-# Convertir a data.table para manipulación eficiente
+# Convertir a data.table
 setDT(tickets)
 setDT(maestroestr)
 
-# Obtener el producto objetivo a promocionar
+# Obtener el producto objetivo
 producto_objetivo <- objetivos$objetivo1$obj
-
-# Mostrar información del producto objetivo
 descripcion_producto <- maestroestr[cod_est == producto_objetivo, descripcion]
 cat("Producto a promocionar:", producto_objetivo, "-", descripcion_producto, "\n")
 
-# Paso 1: Preparar los datos para el algoritmo ALS
-# Crear matriz de interacciones usuario-item, donde cada fila es un usuario (cliente)
-# y cada columna es un ítem (producto)
-
-# Simplificar los datos de tickets a solo las columnas necesarias
+# Preparar datos para ALS
 interacciones <- tickets[, .(id_cliente_enc, cod_est)]
-
-# Contar cuántas veces cada cliente compró cada producto
 interacciones_conteo <- interacciones[, .(cantidad = .N), by = .(id_cliente_enc, cod_est)]
 
-# Crear mapeo de IDs de clientes y productos a índices numéricos secuenciales
-# Esto es necesario para crear la matriz dispersa de manera eficiente
+# Mapear IDs a índices
 clientes_unicos <- unique(interacciones_conteo$id_cliente_enc)
 productos_unicos <- unique(interacciones_conteo$cod_est)
 
@@ -45,11 +37,12 @@ producto_indice <- data.table(
   producto_idx = 1:length(productos_unicos)
 )
 
-# Agregar índices a los datos de interacciones
+# Asignar índices
 interacciones_indices <- merge(interacciones_conteo, cliente_indice, by = "id_cliente_enc")
 interacciones_indices <- merge(interacciones_indices, producto_indice, by = "cod_est")
 
-# Crear matriz dispersa para el algoritmo
+# Crear matriz dispersa original
+# Crear matriz dispersa original
 matriz_dispersa <- sparseMatrix(
   i = interacciones_indices$cliente_idx,
   j = interacciones_indices$producto_idx,
@@ -57,116 +50,140 @@ matriz_dispersa <- sparseMatrix(
   dims = c(length(clientes_unicos), length(productos_unicos))
 )
 
-# Paso 2: Entrenar el modelo ALS (Alternating Least Squares)
+# Binarizar correctamente la matriz dispersa
+matriz_dispersa@x[matriz_dispersa@x > 0] <- 1
+
+
+# Entrenar modelo ALS
 cat("Entrenando modelo ALS...\n")
 modelo_als <- WRMF$new(
-  rank = 20,                # Número de factores latentes
-  lambda = 0.1,             # Regularización
-  max_iter = 10,            # Máximo de iteraciones
-  nthread = parallel::detectCores() - 1,  # Paralelización
-  use_float = FALSE,        # Usar precisión double
-  non_negative = TRUE       # Restricción de factores no negativos
+  rank = 20,
+  lambda = 0.1,
+  max_iter = 10,
+  nthread = parallel::detectCores() - 1,
+  use_float = FALSE,
+  non_negative = TRUE
 )
 
-# Ajustar el modelo (entrenar)
-# En rsparse actual, usamos fit_transform() en lugar de fit()
 factores_usuario <- modelo_als$fit_transform(matriz_dispersa)
 factores_item <- modelo_als$components
 
-# Paso 3: Generar puntuaciones para todos los clientes para el producto objetivo
-cat("Generando recomendaciones...\n")
-# En WRMF, después de fit_transform() necesitamos llamar a components() para obtener los factores de item
-factores_item <- modelo_als$components
+# Similitud entre productos
+cat("Calculando similitudes entre productos...\n")
+factores_item_normalizados <- t(factores_item)
+factores_item_norm <- factores_item_normalizados / sqrt(rowSums(factores_item_normalizados^2))
 
-# Ahora multiplicamos correctamente los factores para obtener las puntuaciones
-puntuaciones <- as.matrix(factores_usuario %*% factores_item)
-
-# Paso 4: Encontrar el índice del producto objetivo
 indice_producto_objetivo <- producto_indice[cod_est == producto_objetivo, producto_idx]
 
-# Si el producto no existe en el conjunto de datos, mostrar error
 if (length(indice_producto_objetivo) == 0) {
   stop("El producto objetivo no se encuentra en los datos de entrenamiento.")
 }
 
-# Paso 5: Extraer las puntuaciones predichas para el producto objetivo para todos los clientes
+similitud_producto <- factores_item_norm %*% factores_item_norm[indice_producto_objetivo, ]
+
+similitudes <- data.table(
+  producto_idx = 1:length(similitud_producto),
+  similitud = as.numeric(similitud_producto)
+)
+
+similitudes <- similitudes[producto_idx != indice_producto_objetivo]
+similitudes <- merge(similitudes, producto_indice, by = "producto_idx")
+similitudes <- merge(similitudes, maestroestr[, .(cod_est, descripcion)], by = "cod_est", all.x = TRUE)
+
+setorder(similitudes, -similitud)
+top20_productos_similares <- similitudes[1:20]
+cat("\nLos 20 productos más similares al producto objetivo son:\n")
+print(top20_productos_similares[, .(cod_est, descripcion, similitud)])
+
+top4_productos_similares <- top20_productos_similares[1:4]
+
+# Generar puntuaciones
+cat("\nGenerando recomendaciones...\n")
+factores_item <- modelo_als$components
+puntuaciones <- as.matrix(factores_usuario %*% factores_item)
+
 puntuaciones_producto_objetivo <- puntuaciones[, indice_producto_objetivo]
 
-# Convertir a data.table para facilitar la manipulación
 resultado <- data.table(
   indice_interno = 1:length(puntuaciones_producto_objetivo),
   afinidad_predicha = puntuaciones_producto_objetivo
 )
-
-# Unir con los IDs originales de los clientes
 resultado <- merge(resultado, cliente_indice, by.x = "indice_interno", by.y = "cliente_idx")
 
-# Ordenar por puntuación descendente
 setorder(resultado, -afinidad_predicha)
-
-# Seleccionar los 10 mejores clientes
 top10_clientes <- resultado[1:10]
 
-# Paso 6: Obtener información adicional sobre estos clientes para análisis
-# Verificar si ya compraron el producto objetivo
 compras_previas <- tickets[
   id_cliente_enc %in% top10_clientes$id_cliente_enc & cod_est == producto_objetivo,
   .(veces_comprado_producto = .N),
   by = id_cliente_enc
 ]
 
-# Agregar esta información al resultado
 top10_clientes <- merge(top10_clientes, compras_previas, by = "id_cliente_enc", all.x = TRUE)
 top10_clientes[is.na(veces_comprado_producto), veces_comprado_producto := 0]
 
-# Obtener el total de compras por cliente (como medida de actividad)
-actividad_cliente <- tickets[
-  id_cliente_enc %in% top10_clientes$id_cliente_enc,
-  .(total_compras_historicas = .N),
+productos_similares_codigos <- top4_productos_similares$cod_est
+
+compras_similares <- tickets[
+  id_cliente_enc %in% top10_clientes$id_cliente_enc &
+    cod_est %in% productos_similares_codigos,
+  .(
+    cantidad_compras = .N,
+    producto = cod_est
+  ),
   by = id_cliente_enc
 ]
-top10_clientes <- merge(top10_clientes, actividad_cliente, by = "id_cliente_enc")
 
-# Añadir una columna con el ranking explícito para facilitar la interpretación de resultados
-top10_clientes[, ranking_recomendacion := rank(-afinidad_predicha, ties.method = "first")]
-
-# Reordenar columnas para una mejor presentación
-setcolorder(top10_clientes, c("ranking_recomendacion", "id_cliente_enc", "afinidad_predicha",
-                              "veces_comprado_producto", "total_compras_historicas", "indice_interno"))
-
-# Mostrar resultados con nombres de columnas más descriptivos
-print(top10_clientes)
-
-# Guardar resultados
-# Solo guardamos los IDs de los clientes según lo solicitado
-saveRDS(top10_clientes$id_cliente_enc, "resultado_objetivo1_ALS.RDS")
-
-# También guardamos el análisis completo para referencia
-# Renombramos las columnas en el archivo de salida para mayor claridad
-nombres_descriptivos <- c(
-  "ranking_recomendacion" = "Ranking",
-  "id_cliente_enc" = "ID_Cliente",
-  "afinidad_predicha" = "Afinidad_Predicha",
-  "veces_comprado_producto" = "Compras_Previas_Producto",
-  "total_compras_historicas" = "Total_Compras_Cliente",
-  "indice_interno" = "Indice_Tecnico"
+compras_productos_similares <- dcast(
+  compras_similares,
+  id_cliente_enc ~ producto,
+  value.var = "cantidad_compras",
+  fill = 0,
+  fun.aggregate = sum
 )
+setDT(compras_productos_similares)
+compras_productos_similares[, total_productos_similares := rowSums(.SD), .SDcols = productos_similares_codigos]
 
-# Crear una copia con nombres de columnas para el archivo final
-top10_para_guardar <- copy(top10_clientes)
-setnames(top10_para_guardar, old = names(nombres_descriptivos), new = nombres_descriptivos)
+top10_clientes <- merge(top10_clientes, compras_productos_similares,
+                        by = "id_cliente_enc", all.x = TRUE)
 
-fwrite(
-  top10_para_guardar,
-  "analisis_recomendaciones_objetivo1_ALS.csv"
-)
+for (col in c(productos_similares_codigos, "total_productos_similares")) {
+  if (col %in% names(top10_clientes)) {
+    top10_clientes[is.na(get(col)), (col) := 0]
+  } else {
+    top10_clientes[, (col) := 0]
+  }
+}
 
-# Mostrar un resumen final
-cat("\nRecomendación completada usando ALS: Los 10 mejores clientes para el producto",
-    producto_objetivo, "han sido identificados.\n")
-cat("De estos clientes:", sum(top10_clientes$veces_comprado_producto > 0),
-    "ya han comprado el producto anteriormente.\n")
-cat("Afinidad promedio predicha:", mean(top10_clientes$afinidad_predicha), "\n")
+top10_clientes[, ranking := rank(-afinidad_predicha, ties.method = "first")]
+
+# DF 1: Tabla principal de clientes recomendados
+df_clientes_recomendados <- top10_clientes[, .(
+  ranking,
+  id_cliente = id_cliente_enc,
+  afinidad = afinidad_predicha,
+  compras_producto = veces_comprado_producto,
+  productos_similares_comprados = total_productos_similares
+)]
+setorder(df_clientes_recomendados, ranking)
+
+write.csv(df_clientes_recomendados, "DATOS/Datos Shiny/df_clientes_recomendados.csv", row.names = T)
+# DF 2: Productos similares
+df_productos_similares <- top20_productos_similares[, .(
+  ranking = 1:.N,
+  codigo_producto = cod_est,
+  nombre_producto = descripcion,
+  similitud
+)]
+df_productos_similares <- df_productos_similares[-11, ]
+write.csv(df_productos_similares, "DATOS/Datos Shiny/df_productos_similares.csv", row.names = T)
+
+# Mostrar resultados
+cat("\n\n=== TABLA 1: CLIENTES RECOMENDADOS ===\n")
+print(df_clientes_recomendados)
+
+cat("\n\n=== TABLA 2: PRODUCTOS SIMILARES (TOP 20) ===\n")
+print(df_productos_similares)
 
 
 
@@ -179,147 +196,49 @@ cat("Afinidad promedio predicha:", mean(top10_clientes$afinidad_predicha), "\n")
 
 
 
-
-
-# Visualización única y clara para resultados del modelo ALS
-# Un solo gráfico entendible que muestra la información más útil
-
-# Cargar librerías necesarias
-library(plotly)
 library(data.table)
+library(reshape2)
+library(plotly)
 
-# Si necesitas instalar plotly:
-# install.packages("plotly")
+# Asegurarse que 'datos_largos' es data.table
+setDT(datos_largos)
 
-# Este script asume que ya tienes el objeto top10_clientes disponible
-# Si no lo tienes, este código crea datos simulados para la visualización
-if (!exists("top10_clientes")) {
-  # Datos simulados para poder ejecutar la visualización
-  set.seed(123)
-  top10_clientes <- data.table(
-    ranking_recomendacion = 1:10,
-    id_cliente_enc = paste0("cliente_", 1:10),
-    afinidad_predicha = c(0.92, 0.87, 0.81, 0.76, 0.72, 0.68, 0.65, 0.62, 0.58, 0.55),
-    veces_comprado_producto = c(0, 2, 1, 0, 1, 0, 3, 0, 1, 0),
-    total_compras_historicas = c(145, 278, 95, 188, 210, 133, 312, 87, 156, 62)
-  )
-}
+# Crear tabla con códigos y descripciones de productos similares
+tabla_productos_similares <- maestroestr[cod_est %in% productos_similares_codigos,
+                                         .(cod_est, descripcion)]
 
-# Asegurarse de que los datos estén ordenados por ranking
-setorder(top10_clientes, ranking_recomendacion)
+# Cambiar nombre columna para hacer merge con datos_largos
+setnames(tabla_productos_similares, "cod_est", "producto_similar")
 
-# Identificar si son clientes nuevos o existentes para el producto
-top10_clientes[, cliente_tipo := ifelse(veces_comprado_producto > 0,
-                                        "Cliente existente",
-                                        "Cliente nuevo")]
+# Convertir producto_similar a character para merge
+datos_largos[, producto_similar := as.character(producto_similar)]
 
-# Crear etiquetas claras para los clientes
-top10_clientes[, cliente_label := paste0("#", ranking_recomendacion, ": ", id_cliente_enc)]
+# Unir nombres descriptivos de productos similares
+datos_largos <- merge(datos_largos, tabla_productos_similares,
+                      by = "producto_similar", all.x = TRUE)
 
-# Crear un único gráfico de barras horizontal que muestre toda la información relevante
-grafico_unico <- plot_ly() %>%
-  # Barras principales que muestran la afinidad predicha
-  add_trace(
-    data = top10_clientes,
-    y = ~reorder(cliente_label, ranking_recomendacion), # Ordenar por ranking
-    x = ~afinidad_predicha,
-    type = 'bar',
-    orientation = 'h',
-    name = 'Afinidad predicha',
-    marker = list(
-      color = ~afinidad_predicha,
-      colorscale = list(c(0, "#d0e3fa"), c(1, "#0066cc")), # Azul, intuitivo
-      line = list(color = 'rgba(0,0,0,0.3)', width = 1)
-    ),
-    text = ~paste(
-      "<b>", cliente_label, "</b>",
-      "<br>Afinidad:", round(afinidad_predicha, 2),
-      "<br>Compras del producto:", veces_comprado_producto,
-      "<br>Compras totales:", total_compras_historicas
-    ),
-    hoverinfo = 'text',
-    showlegend = FALSE
-  ) %>%
-  # Añadir iconos o indicadores para clientes nuevos vs existentes
-  add_annotations(
-    data = top10_clientes,
-    y = ~reorder(cliente_label, ranking_recomendacion),
-    x = rep(0, nrow(top10_clientes)),  # Colocar al inicio
-    text = ifelse(top10_clientes$veces_comprado_producto > 0, "🔄", "🆕"),
-    showarrow = FALSE,
-    xanchor = 'right',
-    xshift = -10,
-    font = list(size = 14)
-  ) %>%
-  # Añadir texto al final de cada barra con el número de compras previas
-  add_annotations(
-    data = top10_clientes,
-    y = ~reorder(cliente_label, ranking_recomendacion),
-    x = ~afinidad_predicha,
-    text = ~paste0(veces_comprado_producto, " 🛒"),
-    showarrow = FALSE,
-    xanchor = 'left',
-    xshift = 10,
-    font = list(size = 12)
-  ) %>%
-  # Diseño y título del gráfico
+# Crear factor para clientes según ranking top 10 para ordenarlos en el gráfico
+datos_largos[, cliente := factor(id_cliente_enc, levels = df_top10$id_cliente)]
+
+# Para que se vea mejor, usar descripción como etiqueta de color (nombre del producto)
+# Asegurarse que no hay NA en descripcion, si los hay poner "Desconocido"
+datos_largos[is.na(descripcion), descripcion := "Desconocido"]
+
+# Graficar
+fig2 <- plot_ly(
+  datos_largos,
+  x = ~cliente,
+  y = ~cantidad_comprada,
+  color = ~descripcion,
+  type = 'bar'
+) %>%
   layout(
-    title = list(
-      text = "Top 10 Clientes Recomendados para el Producto Objetivo",
-      font = list(size = 18)
-    ),
-    xaxis = list(
-      title = "Afinidad Predicha",
-      range = c(0, max(top10_clientes$afinidad_predicha) * 1.2), # Espacio para etiquetas
-      zeroline = TRUE,
-      showgrid = TRUE
-    ),
-    yaxis = list(
-      title = "",
-      zeroline = FALSE,
-      showgrid = FALSE
-    ),
-    # Añadir notas explicativas
-    annotations = list(
-      list(
-        x = 0.5,
-        y = 1.1
-        ,
-        text = "Mayor afinidad = Cliente más propenso a comprar el producto objetivo",
-        showarrow = FALSE,
-        xref = "paper",
-        yref = "paper",
-        font = list(size = 14)
-      ),
-      list(
-        x = 0.5,
-        y = 1.05,
-        text = "🆕 = Cliente nuevo | 🔄 = Cliente existente | 🛒 = Número de compras previas del producto",
-        showarrow = FALSE,
-        xref = "paper",
-        yref = "paper",
-        font = list(size = 14)
-      )
-    ),
-    margin = list(l = 150, r = 50, b = 50, t = 100) # Margen izquierdo para los IDs de clientes
+    barmode = 'stack',
+    title = 'Compras de Productos Similares por Top 10 Clientes Recomendados',
+    xaxis = list(title = 'ID Cliente', tickangle = -45, tickfont = list(size = 10)),
+    yaxis = list(title = 'Cantidad Comprada'),
+    legend = list(title = list(text = '<b>Productos Similares</b>')),
+    margin = list(b = 100)
   )
 
-# Mostrar el gráfico
-grafico_unico
-
-# Función para guardar el gráfico
-guardar_grafico <- function() {
-  # Guardar como HTML interactivo
-  htmlwidgets::saveWidget(as_widget(grafico_unico), "recomendacion_clientes_ALS.html")
-  cat("Gráfico guardado como 'recomendacion_clientes_ALS.html'\n")
-}
-
-# Descomentar para guardar el gráfico
-# guardar_grafico()
-
-cat("\n=== CÓMO INTERPRETAR ESTE GRÁFICO ===\n")
-cat("- Las barras muestran la afinidad predicha para cada cliente (mayor valor = mejor candidato)\n")
-cat("- Los clientes están ordenados por ranking de recomendación (de arriba a abajo)\n")
-cat("- El ícono al inicio indica si es un cliente nuevo (🆕) o existente (🔄)\n")
-cat("- El número al final de cada barra (🛒) muestra cuántas veces el cliente ya compró el producto\n")
-cat("- Al pasar el cursor sobre cada barra se muestra información detallada del cliente\n")
+fig2
