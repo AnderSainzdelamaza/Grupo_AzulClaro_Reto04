@@ -33,8 +33,13 @@ str(comp_rat)
 df_clientes_recomendados <- read.csv("DATOS/Datos Shiny/df_clientes_recomendados.csv")
 df_productos_similares <- read.csv("DATOS/Datos Shiny/df_productos_similares.csv")
 prods <- read.csv("DATOS/Datos Shiny/prods.csv")
+prods <- prods[complete.cases(prods), ]
 prods2 <- read.csv("DATOS/Datos Shiny/prods2.csv")
+prods2 <- prods2[complete.cases(prods2), ]
 comparacion <- read.csv("DATOS/Datos Shiny/comparacion.csv")
+comparacion <- comparacion[complete.cases(comparacion), ]
+tabla_final_limpia <- read.csv("DATOS/Datos Shiny/recomendaciones_clientes.csv")
+resultados <- readRDS("DATOS/Datos Shiny/recomendaciones_als_final.RDS")
 
 # Paleta y tema
 eroski_rojo <- "#F20505"
@@ -48,6 +53,24 @@ tema_eroski <- function(base_size = 12) {
           legend.background = element_rect(fill = eroski_fondo),
           panel.grid.major = element_line(color = "#DADADA"),
           panel.grid.minor = element_blank())
+}
+
+# Cargar funciones
+identificar_productos_comunes <- function(datos_filtrados, n_comunes = 10) {
+  clusters <- unique(na.omit(datos_filtrados$cluster))
+
+  top_por_cluster <- lapply(clusters, function(cl) {
+    datos_filtrados %>%
+      filter(cluster == cl) %>%
+      count(descripcion, sort = TRUE) %>%
+      slice_head(n = n_comunes) %>%
+      pull(descripcion)
+  })
+
+  all_productos <- unlist(top_por_cluster)
+  productos_duplicados <- names(table(all_productos)[table(all_productos) > 1])
+
+  return(productos_duplicados)
 }
 
 # UI
@@ -220,55 +243,40 @@ ui <- navbarPage("Reto 4: Eroski",
                             h3("Resultados por Objetivo"),
 
                             tabsetPanel(
-                              tabPanel("Objetivo 1 - Artículo Promocionado",
-                                       h4("Clientes Recomendados"),
+                              tabPanel("Objetivo 1 - Clientes para Ítem Promocionado",
+                                       h4("Top 10 Clientes para Recomendar el Ítem Promocionado"),
                                        dataTableOutput("tabla_clientes_recomendados"),
 
-                                       h4("Productos Similares al Promocionado"),
+                                       h4("Productos Similares al Ítem Promocionado"),
                                        dataTableOutput("tabla_productos_similares")
                               ),
-
-                              tabPanel("Objetivo 2 - ...",
-                                       h4("Contenido futuro para Objetivo 2")
-                                       # Aquí irán las visualizaciones del objetivo 2
+                              tabPanel("Objetivo 2 - Recomendación Relevante por Cliente",
+                                       h3("Recomendaciones Basadas en Última Compra para 10 Clientes"),
+                                       h4("Tabla de Recomendaciones Personalizadas"),
+                                       DT::dataTableOutput("tabla_recomendaciones_obj2")
                               ),
-
-                              tabPanel("Objetivo 3 - ...",
+                              tabPanel("Objetivo 3 - Ofertas Personalizadas",
                                        fluidPage(
-                                         h3("Objetivo 3 - Recomendación de Productos por Usuario (Feedback Implícito)"),
-                                         h4("Recomendaciones por Modelo Implícito (No Binaria)"),
+                                         h3("Recomendación de Productos en Oferta para Clientes"),
+                                         h4("Modelo con Feedback Implícito (No Binario)"),
                                          dataTableOutput("tabla_recomendaciones_obj3"),
-                                         h4("Recomendaciones por Modelo Binario"),
+                                         h4("Modelo Binario"),
                                          dataTableOutput("tabla_recomendaciones_obj3_bin"),
-                                         h4("Comparación entre ambos modelos"),
-                                         dataTableOutput("tabla_comparacion_modelos"),
-                                         )
-                                       ),
-
-                              tabPanel("Objetivo 4 - ...",
-                                       h4("Contenido futuro para Objetivo 4")
+                                         h4("Comparación entre Ambos Modelos"),
+                                         dataTableOutput("tabla_comparacion_modelos")
+                                       )
+                              ),
+                              tabPanel("Objetivo 4 - Artículo Olvidado en la Última Compra",
+                                       h3("Recomendación del Ítem Faltante para Clientes Olvidadizos"),
+                                       plotlyOutput("grafico_obj4"),
+                                       br(),
+                                       h4("Tabla de Recomendaciones por Cliente"),
+                                       DT::dataTableOutput("tabla_obj4")
                               )
                             )
                           )
                  )
 )
-
-identificar_productos_comunes <- function(datos_filtrados, n_comunes = 10) {
-  clusters <- unique(na.omit(datos_filtrados$cluster))
-
-  top_por_cluster <- lapply(clusters, function(cl) {
-    datos_filtrados %>%
-      filter(cluster == cl) %>%
-      count(descripcion, sort = TRUE) %>%
-      slice_head(n = n_comunes) %>%
-      pull(descripcion)
-  })
-
-  all_productos <- unlist(top_por_cluster)
-  productos_duplicados <- names(table(all_productos)[table(all_productos) > 1])
-
-  return(productos_duplicados)
-}
 
 
 # Server
@@ -1019,6 +1027,55 @@ server <- function(input, output) {
   output$tabla_comparacion_modelos <- renderDataTable({
     datatable(
       comparacion,
+      options = list(pageLength = 10, autoWidth = TRUE),
+      rownames = FALSE
+    )
+  })
+  output$tabla_recomendaciones_obj2 <- DT::renderDataTable({
+    DT::datatable(
+      tabla_final_limpia,
+      options = list(pageLength = 10, autoWidth = TRUE),
+      rownames = FALSE
+    )
+  })
+  output$grafico_obj4 <- renderPlotly({
+    recomendaciones_viz <- resultados[1:min(10, nrow(resultados))]
+    recomendaciones_viz[, id := 1:.N]
+
+    # Extraer categorías de los productos (primera palabra)
+    recomendaciones_viz[, categoria := str_extract(descripcion, "^\\w+")]
+
+    # Crear el gráfico base con ggplot2
+    p <- ggplot(recomendaciones_viz, aes(x = factor(id), y = 1, text = paste0(
+      "ID Cliente: ", id, "<br>",
+      "Código: ", recomendacion, "<br>",
+      "Producto: ", descripcion
+    ))) +
+      geom_tile(aes(fill = categoria), color = "white", width = 0.9, height = 0.9) +
+      geom_text(aes(label = recomendacion), color = "white", fontface = "bold") +
+      scale_fill_brewer(palette = "Set3") +
+      labs(
+        title = "Recomendaciones de Productos por Cliente (Matriz Binaria)",
+        x = "ID Cliente",
+        fill = "Categoría"
+      ) +
+      theme_minimal() +
+      theme(
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        panel.grid = element_blank(),
+        legend.position = "bottom"
+      )
+
+    # Convertir a gráfico interactivo con plotly
+    pp <- ggplotly(p, tooltip = "text") %>%
+      layout(margin = list(l = 50, r = 50, b = 50, t = 100))
+    pp
+  })
+
+  output$tabla_obj4 <- DT::renderDataTable({
+    DT::datatable(
+      resultados,
       options = list(pageLength = 10, autoWidth = TRUE),
       rownames = FALSE
     )
