@@ -6,9 +6,9 @@ library(ggplot2)
 library(lubridate)
 
 # Cargar datos
-tickets <- readRDS("C:/Users/Ander/OneDrive - Mondragon Unibertsitatea/Archivos de Erik Arbaiza Astorquiza - reto 4 1/DATOS/tickets_enc (1).RDS")
-objetivos <- readRDS("C:/Users/Ander/OneDrive - Mondragon Unibertsitatea/Archivos de Erik Arbaiza Astorquiza - reto 4 1/DATOS/objetivos (1).RDS")
-productos <- readRDS("C:/Users/Ander/Downloads/maestroestr (2).RDS")
+tickets <- readRDS("DATOS/tickets_enc (1).RDS")
+objetivos <- readRDS("DATOS/objetivos (1).RDS")
+productos <- readRDS("DATOS/Datos Originales/maestroestr.RDS")
 
 # Obtener los 10 clientes objetivo
 clientes_objetivo2 <- objetivos$objetivo2$obj
@@ -156,7 +156,7 @@ cat("Recomendaciones basadas en popularidad global:",
     sum(recomendaciones_finales$metodo_recomendacion == "popular_global"), "\n")
 cat("Frecuencia histórica promedio:",
     round(mean(recomendaciones_finales$frecuencia_historica), 2), "\n")
-write.csv(tabla_final_limpia, "recomendaciones_clientes.csv", row.names = FALSE)
+write.csv(tabla_final_limpia, "DATOS/Datos Shiny/recomendaciones_clientes.csv", row.names = FALSE)
 # o en Excel:
 library(openxlsx)
-write.xlsx(tabla_final_limpia, "recomendaciones_clientes.xlsx")
+write.xlsx(tabla_final_limpia, "DATOS/Datos Shiny/recomendaciones_clientes.xlsx")

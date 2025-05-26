@@ -7,9 +7,9 @@ library(Matrix)
 library(recommenderlab)
 
 # Cargar datos
-tickets <- readRDS("C:/Users/arbai/OneDrive - Mondragon Unibertsitatea/reto 4/DATOS/tickets_enc (1).RDS")
-objetivos <- readRDS("C:/Users/arbai/OneDrive - Mondragon Unibertsitatea/reto 4/DATOS/objetivos (1).RDS")
-maestroestr <- readRDS("C:/Users/arbai/Downloads/maestroestr (1).RDS")
+tickets <- readRDS("DATOS/tickets_enc (1).RDS")
+objetivos <- readRDS("DATOS/objetivos (1).RDS")
+maestroestr <- readRDS("DATOS/Datos Originales/maestroestr.RDS")
 
 # Asegurar formatos
 setDT(tickets)
@@ -114,8 +114,8 @@ for (cliente in clientes_olvidadizos) {
 
 # Mostrar y guardar resultados
 print(resultados)
-saveRDS(resultados, "recomendaciones_als_final.RDS")
-write.csv(resultados, "recomendaciones_als_final.csv", row.names = FALSE)
+saveRDS(resultados, "DATOS/Datos Shiny/recomendaciones_als_final.RDS")
+write.csv(resultados, "DATOS/Datos Shiny/recomendaciones_als_final.csv", row.names = FALSE)
 
 # Cargar librerías necesarias para gráfico
 library(ggplot2)
