@@ -29,47 +29,26 @@ str(comp_bi_nor)
 comp_rat <- read.csv("DATOS/Datos Shiny/resultados_ratings_comparativa.csv")
 str(comp_rat)
 
-cargar_datos <- function() {
-  tryCatch({
-    # Cargar matriz
-    Matriz <- read.csv("matriz_reducida.csv", row.names = 1) %>%
-      as("matrix") %>%
-      as("realRatingMatrix")
-
-    # Cargar modelos
-    modelos <- list(
-      RANDOM = readRDS("modelos/rec_model_RANDOM.rds"),
-      IBCF = readRDS("modelos/rec_model_IBCF.rds"),
-      UBCF = readRDS("modelos/rec_model_UBCF.rds"),
-      POPULAR = readRDS("modelos/rec_model_POPULAR.rds"),
-      SVDF = readRDS("modelos/rec_model_SVDF.rds")
-    )
-
-    return(list(Matriz = Matriz, modelos = modelos))
-  }, error = function(e) {
-    message("Error al cargar datos: ", e$message)
-    return(NULL)
-  })
-}
-
-datos_app <- cargar_datos()
-
-Matriz <- datos_app$Matriz
-modelos <- datos_app$modelos
+## Datos objetivos
+df_clientes_recomendados <- read.csv("DATOS/Datos Shiny/df_clientes_recomendados.csv")
+df_productos_similares <- read.csv("DATOS/Datos Shiny/df_productos_similares.csv")
+prods <- read.csv("DATOS/Datos Shiny/prods.csv")
+prods <- prods[complete.cases(prods), ]
+prods2 <- read.csv("DATOS/Datos Shiny/prods2.csv")
+prods2 <- prods2[complete.cases(prods2), ]
+comparacion <- read.csv("DATOS/Datos Shiny/comparacion.csv")
+comparacion <- comparacion[complete.cases(comparacion), ]
+tabla_final_limpia <- read.csv("DATOS/Datos Shiny/recomendaciones_clientes.csv")
+resultados <- readRDS("DATOS/Datos Shiny/recomendaciones_als_final.RDS")
 
 # Paleta y tema
 eroski_rojo <- "#F20505"
 eroski_azul <- "#0367A6"
 eroski_gris <- "#666666"
 eroski_fondo <- "#F2F2F2"
-tema_eroski <- function(base_size = 12) {
-  theme_minimal(base_size = base_size) +
-    theme(panel.background = element_rect(fill = eroski_fondo, color = NA),
-          plot.background = element_rect(fill = eroski_fondo, color = NA),
-          legend.background = element_rect(fill = eroski_fondo),
-          panel.grid.major = element_line(color = "#DADADA"),
-          panel.grid.minor = element_blank())
-}
+
+# Cargar funciones
+source("funciones.R")
 
 # UI
 ui <- navbarPage("Reto 4: Eroski",
@@ -193,7 +172,7 @@ ui <- navbarPage("Reto 4: Eroski",
                                        fluidRow(
                                          column(6,
                                                 h3("Métricas Top-N List"),
-                                                plotlyOutput("metricas_topn_mejorado", height = "500px")
+                                                plotlyOutput("metricas_topn", height = "500px")
                                          ),
                                          column(6,
                                                 h3("Métricas de Ratings"),
@@ -214,7 +193,6 @@ ui <- navbarPage("Reto 4: Eroski",
                                                     selectInput("metrica_topn", "Métrica a visualizar:",
                                                                 choices = c("Precision" = "precision",
                                                                             "Recall" = "recall",
-                                                                            "F1" = "F1",
                                                                             "TPR" = "TPR",
                                                                             "FPR" = "FPR"))
                                                   ),
@@ -229,7 +207,7 @@ ui <- navbarPage("Reto 4: Eroski",
                                          ),
                                          column(8,
                                                 plotlyOutput("comparacion_detallada", height = "400px"),
-                                                uiOutput("ui_tablas_comparativas")  # Aquí aparecerán las tablas condicionales
+                                                uiOutput("ui_tablas_comparativas")
                                          )
                                        )
                               )
@@ -239,30 +217,43 @@ ui <- navbarPage("Reto 4: Eroski",
 
                  tabPanel("4 - Resultados Objetivos",
                           fluidPage(
-                            h3("Indicadores clave"),
-                            tableOutput("kpi_table")
+                            h3("Resultados por Objetivo"),
+
+                            tabsetPanel(
+                              tabPanel("Objetivo 1 - Clientes para Ítem Promocionado",
+                                       h4("Top 10 Clientes para Recomendar el Ítem Promocionado"),
+                                       dataTableOutput("tabla_clientes_recomendados"),
+
+                                       h4("Productos Similares al Ítem Promocionado"),
+                                       dataTableOutput("tabla_productos_similares")
+                              ),
+                              tabPanel("Objetivo 2 - Recomendación Relevante por Cliente",
+                                       h3("Recomendaciones Basadas en Última Compra para 10 Clientes"),
+                                       h4("Tabla de Recomendaciones Personalizadas"),
+                                       DT::dataTableOutput("tabla_recomendaciones_obj2")
+                              ),
+                              tabPanel("Objetivo 3 - Ofertas Personalizadas",
+                                       fluidPage(
+                                         h3("Recomendación de Productos en Oferta para Clientes"),
+                                         h4("Modelo con Feedback Implícito (No Binario)"),
+                                         dataTableOutput("tabla_recomendaciones_obj3"),
+                                         h4("Modelo Binario"),
+                                         dataTableOutput("tabla_recomendaciones_obj3_bin"),
+                                         h4("Comparación entre Ambos Modelos"),
+                                         dataTableOutput("tabla_comparacion_modelos")
+                                       )
+                              ),
+                              tabPanel("Objetivo 4 - Artículo Olvidado en la Última Compra",
+                                       h3("Recomendación del Ítem Faltante para Clientes Olvidadizos"),
+                                       plotlyOutput("grafico_obj4"),
+                                       br(),
+                                       h4("Tabla de Recomendaciones por Cliente"),
+                                       DT::dataTableOutput("tabla_obj4")
+                              )
+                            )
                           )
                  )
 )
-
-identificar_productos_comunes <- function(datos_filtrados, n_comunes = 10) {
-  clusters <- unique(na.omit(datos_filtrados$cluster))
-
-  # Lista de productos por cluster
-  top_por_cluster <- lapply(clusters, function(cl) {
-    datos_filtrados %>%
-      filter(cluster == cl) %>%
-      count(descripcion, sort = TRUE) %>%
-      slice_head(n = n_comunes) %>%
-      pull(descripcion)
-  })
-
-  # Contar cuántas veces aparece cada producto entre los clusters
-  all_productos <- unlist(top_por_cluster)
-  productos_duplicados <- names(table(all_productos)[table(all_productos) > 1])
-
-  return(productos_duplicados)
-}
 
 
 # Server
@@ -362,18 +353,13 @@ server <- function(input, output) {
         geom_col() +
         coord_flip() +
         facet_wrap(~categoria, scales = "free", ncol = 1) +
-        scale_fill_manual(values = c("Recurrentes (recomprados)" = "#F20505",
-                                     "Ocasionales (no recomprados)" = "#0367A6")) +
+        scale_fill_manual(values = c("Recurrentes (recomprados)" = eroski_rojo,
+                                     "Ocasionales (no recomprados)" = eroski_azul)) +
         labs(title = "Top productos por patrón de compra",
              subtitle = "Productos recurrentes vs ocasionales",
              x = "",
              y = "Número de clientes") +
-        theme_minimal() +
-        theme(legend.position = "none",
-              strip.text = element_text(size = 12, face = "bold"),
-              plot.title = element_text(size = 16, face = "bold"),
-              plot.subtitle = element_text(size = 12),
-              axis.text.y = element_text(size = 10))
+        tema_eroski()
 
       ggplotly(p, tooltip = "text") %>%
         layout(margin = list(l = 150, r = 50),
@@ -477,12 +463,18 @@ server <- function(input, output) {
             range = c(0, max(centroides)*1.1)
           )
         ),
-        title = paste("Perfil de los 3 Clusters -",
-                      ifelse(input$metodo_radar == "kmeans_cluster", "K-means", "Jerárquico")),
-        showlegend = TRUE
+        title = list(
+          text = paste("Perfil de los 3 Clusters -",
+                       ifelse(input$metodo_radar == "kmeans_cluster", "K-means", "Jerárquico")),
+          font = list(color = "black", size = 18)
+        ),
+        showlegend = TRUE,
+        plot_bgcolor = eroski_fondo,
+        paper_bgcolor = eroski_fondo,
+        font = list(color = "black")
       )
 
-    colors <- c("#0367A6", "#F20505", "#04B2D9")
+    colors <- c(eroski_azul, eroski_rojo, "#04B2D9")
 
     for(i in 1:nrow(centroides)) {
       fig <- fig %>%
@@ -507,7 +499,7 @@ server <- function(input, output) {
                                      y = .data[[input$variable_boxplot]],
                                      fill = factor(.data[[input$metodo_boxplot]]))) +
       geom_boxplot() +
-      scale_fill_manual(values = c("#0367A6", "#F20505", "#04B2D9")) +
+      scale_fill_manual(values = c(eroski_azul, eroski_rojo, "#04B2D9")) +
       labs(title = paste("Distribución de", gsub("_", " ", input$variable_boxplot)),
            subtitle = paste("Método:", ifelse(input$metodo_boxplot == "kmeans_cluster", "K-means", "Jerárquico")),
            x = "Cluster",
@@ -527,7 +519,6 @@ server <- function(input, output) {
     req(datos_completos, input$metodo_distrib)
 
     if(input$tipo_grafico_distrib == "tipo_dia") {
-      # Gráfico por tipo de día (entre semana/fin de semana)
       datos_distrib <- datos_completos %>%
         mutate(cluster = factor(.data[[input$metodo_distrib]])) %>%
         group_by(cluster) %>%
@@ -542,12 +533,11 @@ server <- function(input, output) {
                                      text = paste("Cluster:", cluster, "<br>Tipo:", Tipo,
                                                   "<br>Porcentaje:", round(Porcentaje, 2)))) +
         geom_bar(stat = "identity", position = "stack") +
-        scale_fill_manual(values = c("#0367A6", "#F20505")) +
+        scale_fill_manual(values = c(eroski_azul, eroski_rojo)) +
         labs(title = "Distribución de compras por tipo de día",
              x = "Cluster",
              y = "Proporción de compras") +
-        theme_minimal() +
-        theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+        tema_eroski()
 
     } else if(input$tipo_grafico_distrib == "dia_semana")  {
       datos_dias <- data_completa %>%
@@ -563,7 +553,6 @@ server <- function(input, output) {
         group_by(cluster) %>%
         mutate(porcentaje = n / sum(n))
 
-      # Verificar si hay datos después del filtrado
       if(nrow(datos_dias) == 0) {
         return(plotly_empty(type = "scatter", mode = "markers") %>%
                  layout(title = "No hay datos disponibles para este filtro"))
@@ -574,15 +563,13 @@ server <- function(input, output) {
                                                "<br>Día:", dia_semana,
                                                "<br>Porcentaje:", scales::percent(porcentaje)))) +
         geom_bar(stat = "identity", position = "dodge") +
-        scale_fill_manual(values = c("#0367A6", "#F20505", "#04B2D9")) +
+        scale_fill_manual(values = c(eroski_azul, eroski_rojo, "#04B2D9")) +
         scale_y_continuous(labels = scales::percent) +
         labs(title = "Distribución de compras por día de la semana",
              x = "Día de la semana",
              y = "Porcentaje de compras",
              fill = "Cluster") +
-        theme_minimal() +
-        theme(plot.title = element_text(hjust = 0.5, face = "bold"),
-              axis.text.x = element_text(angle = 45, hjust = 1))
+        tema_eroski()
     }
 
     ggplotly(p, tooltip = "text")
@@ -630,12 +617,11 @@ server <- function(input, output) {
                                    text = paste("Producto:", descripcion,
                                                 "<br>Total compras:", total_compras,
                                                 "<br>Cluster: 1"))) +
-      geom_col(fill = "#0367A6") +
+      geom_col(fill = eroski_azul) +
       coord_flip() +
       labs(title = "Cluster 1: Productos más comprados (exclusivos)",
            x = "", y = "Total compras") +
-      theme_minimal() +
-      theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+      tema_eroski()
 
     ggplotly(p, tooltip = "text")
   })
@@ -655,12 +641,11 @@ server <- function(input, output) {
                                    text = paste("Producto:", descripcion,
                                                 "<br>Total compras:", total_compras,
                                                 "<br>Cluster: 2"))) +
-      geom_col(fill = "#F20505") +
+      geom_col(fill = eroski_rojo) +
       coord_flip() +
       labs(title = "Cluster 2: Productos más comprados (exclusivos)",
            x = "", y = "Total compras") +
-      theme_minimal() +
-      theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+      tema_eroski()
 
     ggplotly(p, tooltip = "text")
   })
@@ -684,14 +669,12 @@ server <- function(input, output) {
       coord_flip() +
       labs(title = "Cluster 3: Productos más comprados (exclusivos)",
            x = "", y = "Total compras") +
-      theme_minimal() +
-      theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+      tema_eroski()
 
     ggplotly(p, tooltip = "text")
   })
 
-  output$metricas_topn_mejorado <- renderPlotly({
-    # Preparar datos con las métricas clave
+  output$metricas_topn <- renderPlotly({
     metricas_topn <- comp_bi_nor %>%
       as.data.frame() %>%
       mutate(
@@ -701,30 +684,62 @@ server <- function(input, output) {
       ) %>%
       select(X, Precision, Recall, F1)
 
-    # Iniciar gráfico vacío
+    colores_algoritmos <- c(
+      eroski_azul,
+      eroski_rojo,
+      "#F2B705",
+      "#8CBF40",
+      "#A6528A",
+      "#04B2D9"
+    )
+
     fig <- plot_ly(type = 'scatterpolar', fill = 'toself')
 
-    # Añadir cada algoritmo como una capa
     for (i in 1:nrow(metricas_topn)) {
       fig <- fig %>%
         add_trace(
           r = as.numeric(metricas_topn[i, c("Precision", "Recall", "F1")]),
           theta = c("Precision", "Recall", "F1"),
-          name = metricas_topn$X[i]
+          name = metricas_topn$X[i],
+          fillcolor = alpha(colores_algoritmos[i], 0.2),
+          line = list(color = colores_algoritmos[i], width = 2),
+          hoverinfo = "text",
+          text = paste0("<b>", metricas_topn$X[i], "</b><br>",
+                        "Precisión: ", round(metricas_topn$Precision[i], 3), "<br>",
+                        "Recall: ", round(metricas_topn$Recall[i], 3), "<br>",
+                        "F1: ", round(metricas_topn$F1[i], 3))
         )
     }
 
-    # Configuración del gráfico
     fig <- fig %>%
       layout(
         polar = list(
           radialaxis = list(
             visible = TRUE,
-            range = c(0, 0.2)
+            range = c(0, max(metricas_topn[, -1], na.rm = TRUE) * 1.1),
+            gridcolor = '#DADADA',
+            tickfont = list(color = 'black')
+          ),
+          angularaxis = list(
+            gridcolor = '#DADADA',
+            linecolor = '#DADADA',
+            tickfont = list(color = 'black')
           )
         ),
+        title = list(
+          text = "Comparación de Métricas Top-N por Algoritmo",
+          font = list(size = 18, color = 'black'),
+          x = 0.1
+        ),
         showlegend = TRUE,
-        title = "Radar de Métricas Top-N por Algoritmo"
+        legend = list(
+          orientation = "h",
+          y = -0.2,
+          font = list(color = 'black')
+        ),
+        plot_bgcolor = eroski_fondo,
+        paper_bgcolor = eroski_fondo,
+        margin = list(t = 80, b = 120)
       )
 
     fig
@@ -737,23 +752,36 @@ server <- function(input, output) {
       mutate(Algoritmo = factor(Algoritmo, levels = unique(Algoritmo)))
 
     plot_ly(datos, x = ~X, y = ~RMSE, type = 'bar', name = 'RMSE',
-            marker = list(color = '#0367A6'),
+            marker = list(color = eroski_azul),
             text = ~paste("Algoritmo:", X, "<br>RMSE:", round(RMSE, 4)),
             hoverinfo = 'text') %>%
       add_trace(y = ~MAE, name = 'MAE',
-                marker = list(color = '#F20505'),
+                marker = list(color = eroski_rojo),
                 text = ~paste("Algoritmo:", X, "<br>MAE:", round(MAE, 4)),
                 hoverinfo = 'text') %>%
-      layout(title = "Comparación de Métricas de Ratings",
-             yaxis = list(title = 'Valor de Métrica'),
-             xaxis = list(title = 'Algoritmo',
-                          tickangle = -45),
-             barmode = 'group',
-             hoverlabel = list(bgcolor = "white"))
+      layout(
+        title = list(
+          text = "Comparación de Métricas de Ratings",
+          font = list(color = "black", size = 18, x=0.1)
+        ),
+        yaxis = list(
+          title = 'Valor de Métrica',
+          gridcolor = "#DADADA"
+        ),
+        xaxis = list(
+          title = 'Algoritmo',
+          tickangle = -45,
+          gridcolor = "#DADADA"
+        ),
+        barmode = 'group',
+        hoverlabel = list(bgcolor = "white"),
+        plot_bgcolor = eroski_fondo,
+        paper_bgcolor = eroski_fondo,
+        font = list(color = "black")
+      )
   })
 
   output$tabla_topn <- renderDT({
-    # Calcular métricas adicionales
     datos_topn <- comp_bi_nor %>%
       as.data.frame() %>%
       mutate(
@@ -771,14 +799,13 @@ server <- function(input, output) {
         buttons = c('copy', 'csv', 'excel'),
         pageLength = 10,
         scrollX = TRUE,
-        # Desactivar filtros automáticos problemáticos
         search = list(regex = FALSE, caseInsensitive = TRUE),
         columnDefs = list(
-          list(targets = '_all', searchable = TRUE)  # Todas las columnas buscables
+          list(targets = '_all', searchable = TRUE)
         )
       ),
       rownames = FALSE,
-      filter = 'none'  # Desactivar filtros individuales si no los necesitas
+      filter = 'none'
     ) %>%
       formatStyle(
         'F1',
@@ -792,12 +819,11 @@ server <- function(input, output) {
         'X',
         fontWeight = 'bold',
         color = 'white',
-        backgroundColor = '#0367A6'
+        backgroundColor = eroski_azul
       )
   })
 
   output$tabla_ratings <- renderDT({
-    # Calcular clasificación de rendimiento
     datos_ratings <- comp_rat %>%
       as.data.frame() %>%
       mutate(
@@ -815,14 +841,13 @@ server <- function(input, output) {
         buttons = c('copy', 'csv', 'excel'),
         pageLength = 10,
         scrollX = TRUE,
-        # Desactivar filtros automáticos problemáticos
         search = list(regex = FALSE, caseInsensitive = TRUE),
         columnDefs = list(
-          list(targets = '_all', searchable = TRUE)  # Todas las columnas buscables
+          list(targets = '_all', searchable = TRUE)
         )
       ),
       rownames = FALSE,
-      filter = 'none'  # Desactivar filtros individuales si no los necesitas
+      filter = 'none'
     ) %>%
       formatStyle(
         'RMSE',
@@ -843,7 +868,7 @@ server <- function(input, output) {
         'X',
         fontWeight = 'bold',
         color = 'white',
-        backgroundColor = '#F20505'
+        backgroundColor = eroski_rojo
       )
   })
 
@@ -871,57 +896,167 @@ server <- function(input, output) {
   })
 
   output$comparacion_detallada <- renderPlotly({
-    # Validación de datos
     req(comp_bi_nor, comp_rat)
 
     if(input$tipo_metrica == "Top-N List") {
-      # Preparar datos para métricas Top-N
       datos <- comp_bi_nor %>%
         as.data.frame() %>%
         select(Algoritmo = X,
                Metric = input$metrica_topn) %>%
-        mutate(Algoritmo = factor(Algoritmo, levels = unique(Algoritmo)))  # Mantener orden original
+        mutate(Algoritmo = factor(Algoritmo, levels = unique(Algoritmo)))
 
-      # Crear gráfico para métricas Top-N
       plot_ly(datos,
               x = ~Algoritmo,
               y = ~Metric,
               type = 'bar',
-              marker = list(color = '#0367A6'),  # Color azul Eroski
+              marker = list(color = eroski_azul),
               text = ~paste("Algoritmo:", Algoritmo,
                             "<br>", input$metrica_topn, ":",
                             round(Metric, 4)),
               hoverinfo = 'text') %>%
-        layout(title = paste("Comparación de", input$metrica_topn, "en modelos Top-N"),
-               yaxis = list(title = input$metrica_topn),
-               xaxis = list(title = "", tickangle = -45),
-               hoverlabel = list(bgcolor = "white"))
+        layout(
+          title = list(
+            text = paste("Comparación de", input$metrica_topn, "en modelos Top-N"),
+            font = list(color = "black", size = 18)
+          ),
+          yaxis = list(
+            title = input$metrica_topn,
+            gridcolor = "#DADADA"
+          ),
+          xaxis = list(
+            title = "",
+            tickangle = -45,
+            gridcolor = "#DADADA"
+          ),
+          hoverlabel = list(bgcolor = "white"),
+          plot_bgcolor = eroski_fondo,
+          paper_bgcolor = eroski_fondo,
+          font = list(color = "black")
+        )
 
     } else {
-      # Preparar datos para métricas de Rating
       datos <- comp_rat %>%
         as.data.frame() %>%
         select(Algoritmo = X,
                Metric = input$metrica_ratings) %>%
-        mutate(Algoritmo = factor(Algoritmo, levels = unique(Algoritmo)))  # Mantener orden original
+        mutate(Algoritmo = factor(Algoritmo, levels = unique(Algoritmo)))
 
-      # Crear gráfico para métricas de Rating
       plot_ly(datos,
               x = ~Algoritmo,
               y = ~Metric,
               type = 'bar',
-              marker = list(color = '#F20505'),  # Color rojo Eroski
+              marker = list(color = eroski_rojo),
               text = ~paste("Algoritmo:", Algoritmo,
                             "<br>", input$metrica_ratings, ":",
                             round(Metric, 4)),
               hoverinfo = 'text') %>%
-        layout(title = paste("Comparación de", input$metrica_ratings, "en modelos de Rating"),
-               yaxis = list(title = input$metrica_ratings),
-               xaxis = list(title = "", tickangle = -45),
-               hoverlabel = list(bgcolor = "white"))
+        layout(
+          title = list(
+            text = paste("Comparación de", input$metrica_ratings, "en modelos de Rating"),
+            font = list(color = "black", size = 18)
+          ),
+          yaxis = list(
+            title = input$metrica_ratings,
+            gridcolor = "#DADADA"
+          ),
+          xaxis = list(
+            title = "",
+            tickangle = -45,
+            gridcolor = "#DADADA"
+          ),
+          hoverlabel = list(bgcolor = "white"),
+          plot_bgcolor = eroski_fondo,
+          paper_bgcolor = eroski_fondo,
+          font = list(color = "black")
+        )
     }
   })
+  output$tabla_clientes_recomendados <- renderDataTable({
+    datatable(
+      df_clientes_recomendados,
+      options = list(pageLength = 10, autoWidth = TRUE),
+      rownames = FALSE
+    )
+  })
+  output$tabla_productos_similares <- renderDataTable({
+    datatable(
+      df_productos_similares,
+      options = list(pageLength = 10, autoWidth = TRUE),
+      rownames = FALSE
+    )
+  })
+  output$tabla_recomendaciones_obj3 <- renderDataTable({
+    datatable(
+      prods,
+      options = list(pageLength = 10, autoWidth = TRUE),
+      rownames = FALSE
+    )
+  })
 
+
+  output$tabla_recomendaciones_obj3_bin <- renderDataTable({
+    datatable(
+      prods2,
+      options = list(pageLength = 10, autoWidth = TRUE),
+      rownames = FALSE
+    )
+  })
+  output$tabla_comparacion_modelos <- renderDataTable({
+    datatable(
+      comparacion,
+      options = list(pageLength = 10, autoWidth = TRUE),
+      rownames = FALSE
+    )
+  })
+  output$tabla_recomendaciones_obj2 <- DT::renderDataTable({
+    DT::datatable(
+      tabla_final_limpia,
+      options = list(pageLength = 10, autoWidth = TRUE),
+      rownames = FALSE
+    )
+  })
+  output$grafico_obj4 <- renderPlotly({
+    recomendaciones_viz <- resultados[1:min(10, nrow(resultados))]
+    recomendaciones_viz[, id := 1:.N]
+
+    # Extraer categorías de los productos (primera palabra)
+    recomendaciones_viz[, categoria := str_extract(descripcion, "^\\w+")]
+
+    # Crear el gráfico base con ggplot2
+    p <- ggplot(recomendaciones_viz, aes(x = factor(id), y = 1, text = paste0(
+      "ID Cliente: ", id, "<br>",
+      "Código: ", recomendacion, "<br>",
+      "Producto: ", descripcion
+    ))) +
+      geom_tile(aes(fill = categoria), color = "white", width = 0.9, height = 0.9) +
+      geom_text(aes(label = recomendacion), color = "white", fontface = "bold") +
+      scale_fill_brewer(palette = "Set3") +
+      labs(
+        title = "Recomendaciones de Productos por Cliente (Matriz Binaria)",
+        x = "ID Cliente",
+        fill = "Categoría"
+      ) +
+      theme_minimal() +
+      theme(
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        panel.grid = element_blank(),
+        legend.position = "bottom"
+      )
+
+    # Convertir a gráfico interactivo con plotly
+    pp <- ggplotly(p, tooltip = "text") %>%
+      layout(margin = list(l = 50, r = 50, b = 50, t = 100))
+    pp
+  })
+
+  output$tabla_obj4 <- DT::renderDataTable({
+    DT::datatable(
+      resultados,
+      options = list(pageLength = 10, autoWidth = TRUE),
+      rownames = FALSE
+    )
+  })
 }
 
 

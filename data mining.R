@@ -9,28 +9,12 @@ library(tidyr)
 # Cargar datos para clustering
 datos_clientes <- readRDS("Datos/datos_para_clustering.RDS")
 
+# Cargar funciones
+source("funciones.R")
+
 # ---------------------------------
 # DETECCIÓN Y ELIMINACIÓN DE OUTLIERS
 # ---------------------------------
-
-# Función para detectar outliers usando el método IQR (rango intercuartílico)
-detect_outliers <- function(data, columnas, coef = 1.5) {
-  outliers_indexes <- c()
-
-  for (col in columnas) {
-    q1 <- quantile(data[[col]], 0.25, na.rm = TRUE)
-    q3 <- quantile(data[[col]], 0.75, na.rm = TRUE)
-    iqr <- q3 - q1
-
-    lower_bound <- q1 - coef * iqr
-    upper_bound <- q3 + coef * iqr
-
-    outliers_col <- which(data[[col]] < lower_bound | data[[col]] > upper_bound)
-    outliers_indexes <- union(outliers_indexes, outliers_col)
-  }
-
-  return(outliers_indexes)
-}
 
 # Seleccionar las columnas numéricas para la detección de outliers
 columnas_numericas <- names(datos_clientes)[sapply(datos_clientes, is.numeric)]
@@ -147,33 +131,6 @@ if (!dir.exists("Resultados")) {
   dir.create("Resultados")
 }
 
-# Función para crear un box plot para cada variable por cluster
-crear_boxplots <- function(datos, var_cluster, titulo) {
-  plots_list <- list()
-
-  for (var in variables_importantes) {
-    # Preparar datos para el boxplot
-    data_plot <- datos %>%
-      select(!!sym(var), !!sym(var_cluster)) %>%
-      rename(cluster = !!sym(var_cluster))
-
-    # Crear boxplot
-    p <- plot_ly(data_plot, x = ~cluster, y = as.formula(paste0("~", var)),
-                 type = "box", color = ~cluster,
-                 colors = c("red", "blue", "green")) %>%
-      layout(title = paste("Distribución de", var, "por Cluster"),
-             xaxis = list(title = "Cluster"),
-             yaxis = list(title = var))
-
-    plots_list[[var]] <- p
-
-    # Guardar gráfico
-    file_name <- paste0("Resultados/", titulo, "_", var, ".html")
-    htmlwidgets::saveWidget(p, file_name)
-  }
-
-  return(plots_list)
-}
 
 # Crear boxplots para K-Means
 boxplots_kmeans <- crear_boxplots(datos_completos, "kmeans_cluster", "kmeans")
@@ -231,50 +188,6 @@ centroides_kmeans_sin_cluster <- centroides_kmeans[,-1]
 radar_data_kmeans <- as.data.frame(t(centroides_kmeans))
 radar_data_kmeans$Variable <- rownames(radar_data_kmeans)
 
-# Función para crear gráfico radar K-means
-create_radar_chart <- function(radar_data, titulo) {
-  # Definir los ejes (variables)
-  variables <- radar_data$Variable
-
-  # Crear un dataframe en formato adecuado para plotly
-  plot_data <- radar_data %>% select(-Variable)
-
-  # Crear trazas para cada cluster
-  fig <- plot_ly()
-
-  # Usamos una paleta de colores adecuada para el número de clusters
-  n_clusters <- ncol(plot_data)
-  cluster_colors <- brewer.pal(max(3, n_clusters), "Set1")[1:n_clusters]
-
-  for (i in 1:ncol(plot_data)) {
-    cluster_values <- c(plot_data[,i], plot_data[1,i])  # Cerrar el polígono
-
-    fig <- fig %>% add_trace(
-      type = 'scatterpolar',
-      r = cluster_values,
-      theta = c(variables, variables[1]),  # Repetir el primer punto para cerrar el polígono
-      name = paste('Cluster', i),
-      line = list(color = cluster_colors[i], width = 2),
-      fill = 'toself',
-      fillcolor = paste0(cluster_colors[i], "50")  # Color semi-transparente
-    )
-  }
-
-  # Diseño del gráfico
-  fig <- fig %>% layout(
-    polar = list(
-      radialaxis = list(
-        visible = TRUE,
-        range = c(min(radar_data[,-ncol(radar_data)]) - 0.5,
-                  max(radar_data[,-ncol(radar_data)]) + 0.5)
-      )
-    ),
-    title = titulo,
-    showlegend = TRUE
-  )
-
-  return(fig)
-}
 
 # Crear y guardar el gráfico de radar para K-means
 radar_plot_kmeans <- create_radar_chart(radar_data_kmeans, "Perfiles de Cluster (Clustering K-means)")
