@@ -304,9 +304,10 @@ radar_plot_kmeans
 
 cat("Mostrando gráfico de radar para Clustering Jerárquico\n")
 radar_plot_jerarquico
-# Imprimir información sobre los centroides
-print(dim(centroides))
-print(paste("Número de filas (clusters):", nrow(centroides)))
-print(paste("Número de columnas (variables):", ncol(centroides)))
 
+write.csv(
+  datos_completos[, c("id_cliente_enc", "kmeans_cluster")],
+  file = "clientes_con_cluster.csv",
+  row.names = FALSE
+)
 
