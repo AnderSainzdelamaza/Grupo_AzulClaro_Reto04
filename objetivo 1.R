@@ -200,29 +200,34 @@ library(data.table)
 library(reshape2)
 library(plotly)
 
-# Asegurarse que 'datos_largos' es data.table
-setDT(datos_largos)
+# Crear datos largos para productos similares y top 10 clientes
+datos_largos <- compras_similares[, .(
+  id_cliente_enc,
+  producto_similar = producto,
+  cantidad_comprada = cantidad_compras
+)]
 
-# Crear tabla con códigos y descripciones de productos similares
-tabla_productos_similares <- maestroestr[cod_est %in% productos_similares_codigos,
-                                         .(cod_est, descripcion)]
-
-# Cambiar nombre columna para hacer merge con datos_largos
-setnames(tabla_productos_similares, "cod_est", "producto_similar")
-
-# Convertir producto_similar a character para merge
+# Asegurar tipo character para merge
 datos_largos[, producto_similar := as.character(producto_similar)]
 
-# Unir nombres descriptivos de productos similares
+# Obtener tabla con descripciones de productos similares
+tabla_productos_similares <- maestroestr[cod_est %in% productos_similares_codigos,
+                                         .(cod_est, descripcion)]
+setnames(tabla_productos_similares, "cod_est", "producto_similar")
+
+# Merge para agregar descripción
 datos_largos <- merge(datos_largos, tabla_productos_similares,
                       by = "producto_similar", all.x = TRUE)
 
-# Crear factor para clientes según ranking top 10 para ordenarlos en el gráfico
+# Definir df_top10 si no está definido
+df_top10 <- df_clientes_recomendados[1:10]
+
+# Crear factor para ordenar clientes en el gráfico
 datos_largos[, cliente := factor(id_cliente_enc, levels = df_top10$id_cliente)]
 
-# Para que se vea mejor, usar descripción como etiqueta de color (nombre del producto)
-# Asegurarse que no hay NA en descripcion, si los hay poner "Desconocido"
+# Reemplazar NA en descripción
 datos_largos[is.na(descripcion), descripcion := "Desconocido"]
+
 
 # Graficar
 fig2 <- plot_ly(
