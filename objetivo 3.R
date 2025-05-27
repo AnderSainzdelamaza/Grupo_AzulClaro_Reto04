@@ -78,14 +78,6 @@ su_matriz <- as.matrix(su)
 su_data <- as.data.frame(su_matriz)
 
 # 3. Función para encontrar usuarios más similares a un usuario específico
-encontrar_usuarios_similares <- function(usuario_id, su_matriz, top_n = 5) {
-  # Obtener similaridades del usuario (excluyendo él mismo)
-  similaridades <- su_matriz[usuario_id, ]
-  similaridades <- similaridades[similaridades < 1 & similaridades > 0]
+source("funciones.R")
 
-  # Ordenar de mayor a menor similaridad (menor distancia = mayor similaridad)
-  usuarios_similares <- sort(similaridades, decreasing = T)[1:top_n]
-
-  return(usuarios_similares)
-}
 encontrar_usuarios_similares(1,su_matriz,5)

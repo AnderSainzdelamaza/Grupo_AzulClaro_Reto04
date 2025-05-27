@@ -1,3 +1,4 @@
+# Cargar librerías
 library(lubridate)
 library(dplyr)
 library(naniar)
@@ -25,17 +26,8 @@ eroski_azul <- "#0367A6"
 eroski_gris <- "#666666"
 eroski_fondo <- "#F2F2F2"
 
-# Creamos un tema para aplicarlo a los graficos
-tema_eroski <- function(base_size = 12) {
-  theme_minimal(base_size = base_size) +
-    theme(
-      panel.background = element_rect(fill = eroski_fondo, color = NA),
-      plot.background = element_rect(fill = eroski_fondo, color = NA),
-      legend.background = element_rect(fill = eroski_fondo),
-      panel.grid.major = element_line(color = "#DADADA"),
-      panel.grid.minor = element_blank()
-    )+ggplotly()
-}
+# Cargar función de tema
+source("funciones.R")
 
 # Top 20 productos
 top_productos <- data_completa %>%
@@ -165,7 +157,7 @@ ggplot(habitos_cliente, aes(x = tickets_distintos, y = total_productos)) +
 
 # Compras por dia de la semana
 tickets_por_dia_semana <- data_completa %>%
-  mutate(dia_semana = wday(dia, label = TRUE, abbr = FALSE, week_start = 1)) %>%
+  mutate(dia_semana = lubridate::wday(dia, label = TRUE, abbr = FALSE, week_start = 1)) %>%
   group_by(dia_semana, dia) %>%
   summarise(tickets = n_distinct(num_ticket), .groups = "drop") %>%
   group_by(dia_semana) %>%
@@ -182,7 +174,7 @@ ggplot(tickets_por_dia_semana, aes(x = dia_semana, y = promedio_tickets, group =
 
 # Producto más vendido por día de la semana
 productos_por_dia <- data_completa %>%
-  mutate(dia_semana = wday(dia, label = TRUE, abbr = FALSE, week_start = 1)) %>%
+  mutate(dia_semana = lubridate::wday(dia, label = TRUE, abbr = FALSE, week_start = 1)) %>%
   group_by(dia_semana, descripcion) %>%
   summarise(cantidad = n(), .groups = "drop")
 
@@ -206,7 +198,7 @@ ggplot(top_3_productos_por_dia, aes(x = dia_semana, y = cantidad, fill = descrip
 
 # Clasificar los días en semana vs finde
 clientes_por_periodo <- data_completa %>%
-  mutate(dia_semana = wday(dia, week_start = 1),
+  mutate(dia_semana = lubridate::wday(dia, week_start = 1),
          periodo = ifelse(dia_semana <= 5, "Entre semana", "Fin de semana")) %>%
   group_by(periodo) %>%
   summarise(clientes_unicos = n_distinct(id_cliente_enc), .groups = "drop")
@@ -249,7 +241,7 @@ data_completa %>%
 
 # Top productos por día de la semana
 top_por_dia <- data_completa %>%
-  mutate(dia_semana = wday(dia, label = T, week_start = 1, abbr=F)) %>%
+  mutate(dia_semana = lubridate::wday(dia, label = T, week_start = 1, abbr=F)) %>%
   count(dia_semana, descripcion) %>%
   group_by(dia_semana) %>%
   slice_max(order_by = n, n = 5)
@@ -296,3 +288,4 @@ ggplot(habitos_cliente_long, aes(x = valor, fill = variable, color = variable)) 
   ) +
   tema_eroski() +
   xlim(0, 200)
+
