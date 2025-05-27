@@ -167,7 +167,9 @@ df_clientes_recomendados <- top10_clientes[, .(
 )]
 setorder(df_clientes_recomendados, ranking)
 
+
 write.csv(df_clientes_recomendados, "DATOS/Datos Shiny/df_clientes_recomendados.csv", row.names = T)
+
 # DF 2: Productos similares
 df_productos_similares <- top20_productos_similares[, .(
   ranking = 1:.N,
@@ -176,7 +178,9 @@ df_productos_similares <- top20_productos_similares[, .(
   similitud
 )]
 df_productos_similares <- df_productos_similares[-11, ]
+
 write.csv(df_productos_similares, "DATOS/Datos Shiny/df_productos_similares.csv", row.names = T)
+
 
 # Mostrar resultados
 cat("\n\n=== TABLA 1: CLIENTES RECOMENDADOS ===\n")
@@ -222,7 +226,9 @@ datos_largos[, cliente := factor(id_cliente_enc, levels = df_top10$id_cliente)]
 
 # Para que se vea mejor, usar descripción como etiqueta de color (nombre del producto)
 # Asegurarse que no hay NA en descripcion, si los hay poner "Desconocido"
-datos_largos[is.na(descripcion), descripcion := "Desconocido"]
+
+datos_largos[, descripcion := fifelse(is.na(descripcion.x), descripcion.y, descripcion.x)]
+datos_largos[, c("descripcion.x", "descripcion.y") := NULL]
 
 # Graficar
 fig2 <- plot_ly(
