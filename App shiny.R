@@ -46,32 +46,9 @@ eroski_rojo <- "#F20505"
 eroski_azul <- "#0367A6"
 eroski_gris <- "#666666"
 eroski_fondo <- "#F2F2F2"
-tema_eroski <- function(base_size = 12) {
-  theme_minimal(base_size = base_size) +
-    theme(panel.background = element_rect(fill = eroski_fondo, color = NA),
-          plot.background = element_rect(fill = eroski_fondo, color = NA),
-          legend.background = element_rect(fill = eroski_fondo),
-          panel.grid.major = element_line(color = "#DADADA"),
-          panel.grid.minor = element_blank())
-}
 
 # Cargar funciones
-identificar_productos_comunes <- function(datos_filtrados, n_comunes = 10) {
-  clusters <- unique(na.omit(datos_filtrados$cluster))
-
-  top_por_cluster <- lapply(clusters, function(cl) {
-    datos_filtrados %>%
-      filter(cluster == cl) %>%
-      count(descripcion, sort = TRUE) %>%
-      slice_head(n = n_comunes) %>%
-      pull(descripcion)
-  })
-
-  all_productos <- unlist(top_por_cluster)
-  productos_duplicados <- names(table(all_productos)[table(all_productos) > 1])
-
-  return(productos_duplicados)
-}
+source("funciones.R")
 
 # UI
 ui <- navbarPage("Reto 4: Eroski",
