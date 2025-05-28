@@ -1,3 +1,4 @@
+# Cargar librerías
 library(lubridate)
 library(dplyr)
 library(naniar)
@@ -25,17 +26,8 @@ eroski_azul <- "#0367A6"
 eroski_gris <- "#666666"
 eroski_fondo <- "#F2F2F2"
 
-# Creamos un tema para aplicarlo a los graficos
-tema_eroski <- function(base_size = 12) {
-  theme_minimal(base_size = base_size) +
-    theme(
-      panel.background = element_rect(fill = eroski_fondo, color = NA),
-      plot.background = element_rect(fill = eroski_fondo, color = NA),
-      legend.background = element_rect(fill = eroski_fondo),
-      panel.grid.major = element_line(color = "#DADADA"),
-      panel.grid.minor = element_blank()
-    )+ggplotly()
-}
+# Cargar función de tema
+source("funciones.R")
 
 # Top 20 productos
 top_productos <- data_completa %>%
@@ -165,7 +157,7 @@ ggplot(habitos_cliente, aes(x = tickets_distintos, y = total_productos)) +
 
 # Compras por dia de la semana
 tickets_por_dia_semana <- data_completa %>%
-  mutate(dia_semana = wday(dia, label = TRUE, abbr = FALSE, week_start = 1)) %>%
+  mutate(dia_semana = lubridate::wday(dia, label = TRUE, abbr = FALSE, week_start = 1)) %>%
   group_by(dia_semana, dia) %>%
   summarise(tickets = n_distinct(num_ticket), .groups = "drop") %>%
   group_by(dia_semana) %>%
@@ -182,7 +174,7 @@ ggplot(tickets_por_dia_semana, aes(x = dia_semana, y = promedio_tickets, group =
 
 # Producto más vendido por día de la semana
 productos_por_dia <- data_completa %>%
-  mutate(dia_semana = wday(dia, label = TRUE, abbr = FALSE, week_start = 1)) %>%
+  mutate(dia_semana = lubridate::wday(dia, label = TRUE, abbr = FALSE, week_start = 1)) %>%
   group_by(dia_semana, descripcion) %>%
   summarise(cantidad = n(), .groups = "drop")
 
@@ -206,7 +198,7 @@ ggplot(top_3_productos_por_dia, aes(x = dia_semana, y = cantidad, fill = descrip
 
 # Clasificar los días en semana vs finde
 clientes_por_periodo <- data_completa %>%
-  mutate(dia_semana = wday(dia, week_start = 1),
+  mutate(dia_semana = lubridate::wday(dia, week_start = 1),
          periodo = ifelse(dia_semana <= 5, "Entre semana", "Fin de semana")) %>%
   group_by(periodo) %>%
   summarise(clientes_unicos = n_distinct(id_cliente_enc), .groups = "drop")
@@ -249,7 +241,7 @@ data_completa %>%
 
 # Top productos por día de la semana
 top_por_dia <- data_completa %>%
-  mutate(dia_semana = wday(dia, label = T, week_start = 1, abbr=F)) %>%
+  mutate(dia_semana = lubridate::wday(dia, label = T, week_start = 1, abbr=F)) %>%
   count(dia_semana, descripcion) %>%
   group_by(dia_semana) %>%
   slice_max(order_by = n, n = 5)
@@ -296,3 +288,168 @@ ggplot(habitos_cliente_long, aes(x = valor, fill = variable, color = variable)) 
   ) +
   tema_eroski() +
   xlim(0, 200)
+
+
+# Asegúrate de tener la carpeta para guardar los PDFs
+dir.create("graficos", showWarnings = FALSE)
+
+# 1. Top 20 productos
+p1 <- quote(
+  ggplot(top_productos, aes(x = reorder(descripcion, n), y = n)) +
+    geom_col(fill = eroski_azul) +
+    coord_flip() +
+    labs(title = "Top 20 productos más vendidos", x = "Producto", y = "Cantidad vendida")+
+    tema_eroski()
+)
+guardar_grafico("01_top_20_productos", p1)
+
+# 2. Compras totales por día
+p2 <- quote(
+  ggplot(compras_dia, aes(x = dia, y = n)) +
+    geom_line(color = eroski_rojo) +
+    labs(title = "Compras totales por día", x = "Fecha", y = "Número de productos")+
+    tema_eroski()
+)
+guardar_grafico("02_compras_por_dia", p2)
+
+# 3. Segmentación de clientes
+p3 <- quote(
+  ggplot(segmentos, aes(x = segmento)) +
+    geom_bar(fill = eroski_rojo) +
+    labs(title = "Segmentación de clientes por número de compras", x = "Segmento", y = "Clientes")+
+    tema_eroski()
+)
+guardar_grafico("03_segmentacion_clientes", p3)
+
+# 4. Densidad de productos comprados
+p4 <- quote(
+  ggplot(habitos_cliente, aes(x = total_productos)) +
+    geom_density(fill = eroski_rojo, color=eroski_rojo) +
+    labs(title = "Distribución de productos comprados por cliente", x = "Total productos", y = "Densidad") +
+    theme(panel.background = element_rect(fill = eroski_fondo)) +
+    scale_x_continuous(lim=c(0,400)) +
+    tema_eroski()
+)
+guardar_grafico("04_densidad_productos_cliente", p4)
+
+# 5. Boxplot de productos distintos
+p5 <- quote(
+  ggplot(habitos_cliente, aes(y = productos_distintos)) +
+    geom_boxplot(fill = eroski_rojo, outlier.color = eroski_gris) +
+    labs(title = "Variedad de productos distintos por cliente", y = "Productos distintos") +
+    theme(panel.background = element_rect(fill = eroski_fondo)) +
+    tema_eroski()
+)
+guardar_grafico("05_boxplot_productos_distintos", p5)
+
+# 6. Histograma de productos distintos
+p6 <- quote(
+  ggplot(habitos_cliente, aes(x = productos_distintos)) +
+    geom_histogram(bins = 30, fill = eroski_rojo, color = "white") +
+    labs(title = "Distribución de productos distintos por cliente", x = "Productos distintos", y = "Número de clientes") +
+    scale_x_continuous(lim=c(0,200)) +
+    tema_eroski()
+)
+guardar_grafico("06_histograma_productos_distintos", p6)
+
+# 7. Violín días de compra
+p7 <- quote(
+  ggplot(habitos_cliente, aes(x = "Clientes", y = dias_compra)) +
+    geom_violin(fill = eroski_rojo, color=eroski_rojo) +
+    labs(title = "Frecuencia de compra por cliente", x = "", y = "Días únicos") +
+    theme(panel.background = element_rect(fill = eroski_fondo), axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+    scale_y_continuous(lim=c(0,16)) +
+    tema_eroski()
+)
+guardar_grafico("07_violin_dias_compra", p7)
+
+# 8. Clientes por rango de tickets
+p8 <- quote(
+  habitos_cliente %>%
+    mutate(grupo_tickets = cut(tickets_distintos,
+                               breaks = c(0, 5, 10, 20, 50, 100, Inf),
+                               labels = c("1-5", "6-10", "11-20", "21-50", "51-100", "100+"))) %>%
+    ggplot(aes(x = grupo_tickets)) +
+    geom_bar(fill = eroski_rojo) +
+    labs(title = "Clientes por rango de tickets", x = "Rango de tickets", y = "Número de clientes") +
+    tema_eroski()
+)
+guardar_grafico("08_clientes_rango_tickets", p8)
+
+# 9. Dispersión tickets vs productos
+p9 <- quote(
+  ggplot(habitos_cliente, aes(x = tickets_distintos, y = total_productos)) +
+    geom_point(alpha = 0.3, color = eroski_rojo) +
+    geom_smooth(method = "lm", color = eroski_azul) +
+    labs(title = "Relación entre tickets y productos", x = "Tickets distintos", y = "Productos comprados") +
+    tema_eroski()
+)
+guardar_grafico("09_dispersión_tickets_vs_productos", p9)
+
+# 10. Promedio tickets por día de la semana
+p10 <- quote(
+  ggplot(tickets_por_dia_semana, aes(x = dia_semana, y = promedio_tickets, group = 1)) +
+    geom_line(color = eroski_azul, size = 1.2) +
+    geom_point(color = eroski_rojo, size = 3) +
+    labs(title = "Promedio diario de tickets por día de la semana", x = "Día de la semana", y = "Tickets promedio") +
+    tema_eroski()
+)
+guardar_grafico("10_promedio_tickets_dia_semana", p10)
+
+
+# 11. Top 3 productos por día de la semana
+p11 <- ggplot(top_3_productos_por_dia, aes(x = dia_semana, y = cantidad, fill = descripcion)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 3 productos más comprados por día de la semana", x = "Día de la semana", y = "Unidades vendidas") +
+  scale_fill_manual(values=colores_6) +
+  tema_eroski()
+guardar_grafico("top3_productos_por_dia",p11)
+
+# 12. Clientes entre semana vs finde
+p12 <- ggplot(clientes_por_periodo, aes(x = periodo, y = clientes_unicos, fill = periodo)) +
+  geom_col(width = 0.6, show.legend = FALSE) +
+  scale_fill_manual(values = c("Entre semana" = eroski_rojo, "Fin de semana" = eroski_azul)) +
+  labs(title = "Clientes únicos: Entre semana vs Fin de semana", x = "", y = "Número de clientes únicos") +
+  theme(panel.background = element_rect(fill = eroski_fondo),
+        text = element_text(size = 13)) +
+  tema_eroski()
+guardar_grafico("clientes_semana_vs_finde", p12)
+
+# 13. Compras semanales
+p13 <- data_completa %>%
+  mutate(semana = floor_date(dia, "week")) %>%
+  count(semana) %>%
+  ggplot(aes(x = semana, y = n)) +
+  geom_line(color = eroski_azul, size = 1.2) +
+  geom_point(color = eroski_rojo, size = 3) +
+  labs(title = "Compras semanales", x = "Semana", y = "Total de compras") +
+  theme_minimal() + tema_eroski()
+guardar_grafico("compras_semanales", p13)
+
+# 14. Top productos por día (heatmap)
+p14 <- ggplot(top_por_dia, aes(x = dia_semana, y = fct_reorder(descripcion, n))) +
+  geom_tile(aes(fill = n), color = "white") +
+  scale_fill_gradient(low = eroski_azul, high = eroski_rojo) +
+  labs(title = "Top productos por día de la semana", x = "Día", y = "Producto") +
+  tema_eroski()
+guardar_grafico("heatmap_top_productos_por_dia", p14)
+
+# 15. Intervalos entre compras
+p15 <- ggplot(intervalos_dias, aes(x = dias_entre_compras)) +
+  geom_histogram(bins = 30, fill = eroski_azul, color = "white") +
+  labs(title = "Distribución de días entre compras", x = "Días entre compras", y = "Número de casos") +
+  tema_eroski() +
+  scale_x_continuous(limits = c(0,30))
+guardar_grafico("intervalos_entre_compras", p15)
+
+# 16. Densidades comparadas de hábitos de clientes
+p16 <- ggplot(habitos_cliente_long, aes(x = valor, fill = variable, color = variable)) +
+  geom_density(alpha = 0.3) +
+  scale_fill_manual(values = c(eroski_rojo, eroski_azul, "#F4D35E")) +
+  scale_color_manual(values = c(eroski_rojo, eroski_azul, "#F4D35E")) +
+  labs(title = "Curvas de densidad de comportamiento de clientes", x = "Cantidad", y = "Densidad",
+       fill = "Variable", color = "Variable") +
+  tema_eroski() +
+  xlim(0, 200)
+guardar_grafico("densidad_comportamiento_clientes", p16)
+
