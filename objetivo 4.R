@@ -7,9 +7,11 @@ library(Matrix)
 library(recommenderlab)
 
 # Cargar datos
+
 tickets <- readRDS("DATOS/tickets_enc (1).RDS")
 objetivos <- readRDS("DATOS/objetivos (1).RDS")
 maestroestr <- readRDS("DATOS/Datos Originales/maestroestr.RDS")
+
 
 # Asegurar formatos
 setDT(tickets)
@@ -114,8 +116,10 @@ for (cliente in clientes_olvidadizos) {
 
 # Mostrar y guardar resultados
 print(resultados)
+
 saveRDS(resultados, "DATOS/Datos Shiny/recomendaciones_als_final.RDS")
 write.csv(resultados, "DATOS/Datos Shiny/recomendaciones_als_final.csv", row.names = FALSE)
+
 
 # Cargar librerías necesarias para gráfico
 library(ggplot2)
@@ -158,3 +162,4 @@ pp <- ggplotly(p, tooltip = "text") %>%
 
 # Mostrar el gráfico
 pp
+htmlwidgets::saveWidget(pp, "graficos/recomendaciones_de_productos_por_cliente.html", selfcontained = TRUE)

@@ -167,7 +167,9 @@ df_clientes_recomendados <- top10_clientes[, .(
 )]
 setorder(df_clientes_recomendados, ranking)
 
+
 write.csv(df_clientes_recomendados, "DATOS/Datos Shiny/df_clientes_recomendados.csv", row.names = T)
+
 # DF 2: Productos similares
 df_productos_similares <- top20_productos_similares[, .(
   ranking = 1:.N,
@@ -176,7 +178,9 @@ df_productos_similares <- top20_productos_similares[, .(
   similitud
 )]
 df_productos_similares <- df_productos_similares[-11, ]
+
 write.csv(df_productos_similares, "DATOS/Datos Shiny/df_productos_similares.csv", row.names = T)
+
 
 # Mostrar resultados
 cat("\n\n=== TABLA 1: CLIENTES RECOMENDADOS ===\n")
@@ -199,7 +203,6 @@ print(df_productos_similares)
 library(data.table)
 library(reshape2)
 library(plotly)
-
 # Crear datos largos para productos similares y top 10 clientes
 datos_largos <- compras_similares[, .(
   id_cliente_enc,
@@ -207,6 +210,16 @@ datos_largos <- compras_similares[, .(
   cantidad_comprada = cantidad_compras
 )]
 
+<<<<<<< HEAD
+# Crear datos largos para productos similares y top 10 clientes
+datos_largos <- compras_similares[, .(
+  id_cliente_enc,
+  producto_similar = producto,
+  cantidad_comprada = cantidad_compras
+)]
+
+=======
+>>>>>>> a2cf3a0539363a9af6704cecfa2d4cc157b1402e
 # Asegurar tipo character para merge
 datos_largos[, producto_similar := as.character(producto_similar)]
 
@@ -247,3 +260,5 @@ fig2 <- plot_ly(
   )
 
 fig2
+htmlwidgets::saveWidget(fig2, "graficos/compras_productos_similares.html", selfcontained = TRUE)
+
