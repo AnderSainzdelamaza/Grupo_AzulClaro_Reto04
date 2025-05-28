@@ -11,6 +11,12 @@ tema_eroski <- function(base_size = 12) {
     )+ggplotly()
 }
 
+guardar_grafico <- function(nombre_archivo, plot_expr) {
+  pdf(file = paste0("graficos/", nombre_archivo, ".pdf"), width = 10, height = 6)
+  print(eval(plot_expr))
+  dev.off()
+}
+
 ## Shiny
 identificar_productos_comunes <- function(datos_filtrados, n_comunes = 10) {
   clusters <- unique(na.omit(datos_filtrados$cluster))
