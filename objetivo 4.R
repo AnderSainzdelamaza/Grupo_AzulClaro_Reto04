@@ -162,3 +162,4 @@ pp <- ggplotly(p, tooltip = "text") %>%
 
 # Mostrar el gráfico
 pp
+htmlwidgets::saveWidget(pp, "graficos/recomendaciones_de_productos_por_cliente.html", selfcontained = TRUE)
