@@ -78,6 +78,5 @@ su_matriz <- as.matrix(su)
 su_data <- as.data.frame(su_matriz)
 
 # 3. Función para encontrar usuarios más similares a un usuario específico
-source("funciones.R")
-
+source("Scripts/funciones.R")
 encontrar_usuarios_similares(1,su_matriz,5)

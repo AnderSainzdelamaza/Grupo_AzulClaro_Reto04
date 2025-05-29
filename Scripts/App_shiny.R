@@ -48,7 +48,7 @@ eroski_gris <- "#666666"
 eroski_fondo <- "#F2F2F2"
 
 # Cargar funciones
-source("funciones.R")
+source("Scripts/funciones.R")
 
 # UI
 ui <- navbarPage("Reto 4: Eroski",

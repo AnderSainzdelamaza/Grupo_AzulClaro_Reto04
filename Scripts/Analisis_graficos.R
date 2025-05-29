@@ -27,7 +27,7 @@ eroski_gris <- "#666666"
 eroski_fondo <- "#F2F2F2"
 
 # Cargar función de tema
-source("funciones.R")
+source("Scripts/funciones.R")
 
 # Top 20 productos
 top_productos <- data_completa %>%

@@ -1,4 +1,4 @@
-source("funciones.R")
+source("Scripts/funciones.R")
 
 # WRMF simplificado en R usando ALS
 
