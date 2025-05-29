@@ -10,7 +10,7 @@ library(tidyr)
 datos_clientes <- readRDS("Datos/datos_para_clustering.RDS")
 
 # Cargar funciones
-source("funciones.R")
+source("Scripts/funciones.R")
 
 # ---------------------------------
 # DETECCIÓN Y ELIMINACIÓN DE OUTLIERS
