@@ -210,7 +210,7 @@ datos_largos <- compras_similares[, .(
   cantidad_comprada = cantidad_compras
 )]
 
-<<<<<<< HEAD
+
 # Crear datos largos para productos similares y top 10 clientes
 datos_largos <- compras_similares[, .(
   id_cliente_enc,
@@ -218,8 +218,7 @@ datos_largos <- compras_similares[, .(
   cantidad_comprada = cantidad_compras
 )]
 
-=======
->>>>>>> a2cf3a0539363a9af6704cecfa2d4cc157b1402e
+
 # Asegurar tipo character para merge
 datos_largos[, producto_similar := as.character(producto_similar)]
 
